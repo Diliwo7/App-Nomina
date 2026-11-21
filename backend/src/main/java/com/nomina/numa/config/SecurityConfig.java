@@ -42,15 +42,8 @@ public class SecurityConfig {
                 .requestMatchers("/login", "/register", "/test", "/ping", "/health", "/error").permitAll()
                 .requestMatchers("/api/auth/**", "/api/register/**").permitAll()
 
-                .requestMatchers(
-                    "/api/alertas/**",
-                    "/api/periodo-nomina/**",
-                    "/api/prediccion/**",
-                    "/api/periodos/**",
-                    "/api/empleados/**",
-                    "/api/historial/**",
-                    "/api/portal/**"
-                ).permitAll()
+                // El portal valida sus tokens de empleado de forma explícita en cada operación.
+                .requestMatchers("/api/portal/**").permitAll()
 
                 // Cualquier otra petición requiere autenticación
                 .anyRequest().authenticated()

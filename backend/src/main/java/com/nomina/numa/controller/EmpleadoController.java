@@ -25,10 +25,16 @@ public class EmpleadoController {
     @GetMapping
     public ResponseEntity<Page<Empleado>> getEmpleados(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Long idSucursal) {
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Empleado> empleadosPage = empleadoService.findAll(pageable);
+        Page<Empleado> empleadosPage;
+        if (idSucursal != null) {
+            empleadosPage = empleadoService.findByIdSucursal(idSucursal, pageable);
+        } else {
+            empleadosPage = empleadoService.findAll(pageable);
+        }
 
         return ResponseEntity.ok(empleadosPage);
     }

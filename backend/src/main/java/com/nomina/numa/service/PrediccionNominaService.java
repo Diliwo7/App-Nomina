@@ -1,7 +1,7 @@
 package com.nomina.numa.service;
 
-import com.nomina.numa.model.mongo.PeriodoNomina;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
+import com.nomina.numa.model.postgres.PeriodoNomina;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import weka.classifiers.functions.LinearRegression;
@@ -21,7 +21,7 @@ public class PrediccionNominaService {
         Map<String, Object> resultado = new LinkedHashMap<>();
 
         try {
-            // 1. Obtener costos históricos REALES de MongoDB
+            // 1. Obtener costos históricos REALES de PostgreSQL
             List<PeriodoNomina> periodosCerrados = periodoRepository.findAll().stream()
                     .filter(p -> "CERRADO".equals(p.getEstado()))
                     .filter(p -> p.getCostoMillones() != null && p.getCostoMillones() > 0)

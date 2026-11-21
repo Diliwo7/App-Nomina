@@ -2,8 +2,8 @@ package com.nomina.numa.service;
 
 import com.nomina.numa.model.postgres.Empleado;
 import com.nomina.numa.repository.jpa.EmpleadoRepository;
-import com.nomina.numa.repository.mongo.ContratacionRepository;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
+import com.nomina.numa.repository.jpa.ContratacionRepository;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
 import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -79,7 +79,7 @@ public class AlertaService {
             }
         });
 
-        // 2. Alertas por contrataciones (contratos) en MongoDB con estado VIGENTE
+        // 2. Alertas por contrataciones (contratos) con estado VIGENTE
         contratacionRepository.findAll().forEach(contratacion -> {
             LocalDate fechaFin = contratacion.getFechaFin();
             if (fechaFin == null)

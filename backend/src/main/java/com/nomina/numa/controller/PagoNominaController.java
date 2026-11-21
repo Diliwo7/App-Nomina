@@ -1,7 +1,7 @@
 // backend/src/main/java/com/nomina/numa/controller/PagoNominaController.java
 package com.nomina.numa.controller;
 
-import com.nomina.numa.model.mongo.PagoNomina;
+import com.nomina.numa.model.postgres.PagoNomina;
 import com.nomina.numa.dto.PagoNominaRequest;
 import com.nomina.numa.dto.NominaLiquidacionResponse;
 import com.nomina.numa.service.PagoNominaService;
@@ -30,7 +30,7 @@ public class PagoNominaController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<PagoNomina> getById(@PathVariable String id) {
+    public ResponseEntity<PagoNomina> getById(@PathVariable Long id) {
         return service.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -42,7 +42,7 @@ public class PagoNominaController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable String id) {
+    public ResponseEntity<?> delete(@PathVariable Long id) {
         service.deleteById(id);
         return ResponseEntity.ok().build();
     }

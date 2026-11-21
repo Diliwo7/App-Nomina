@@ -36,3 +36,9 @@ frontend/dist/
 *.nar
 *.ear
 *.tar
+.env
+backup_numa.sql
+.github/modernize/
+.github/java-upgrade/
+mongodump_test/
+logs/

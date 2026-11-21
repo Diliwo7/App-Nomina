@@ -1,21 +1,15 @@
 package com.nomina.numa.controller;
 
-import com.nomina.numa.model.mongo.Novedad;
-import com.nomina.numa.model.mongo.PeriodoNomina;
-import com.nomina.numa.model.postgres.Empleado;
-import com.nomina.numa.repository.jpa.EmpleadoRepository;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
+import com.nomina.numa.model.postgres.Novedad;
+import com.nomina.numa.model.postgres.PeriodoNomina;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
 import com.nomina.numa.service.NovedadService;
-import com.nomina.numa.service.NovedadDirectService;
-import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.Document;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -27,8 +21,6 @@ import java.util.stream.Collectors;
 public class NovedadController {
 
     private final NovedadService novedadService;
-    private final NovedadDirectService directService;
-    private final EmpleadoRepository empleadoRepository;
     private final PeriodoNominaRepository periodoNominaRepository;
 
     @GetMapping("/empleado/{empleadoId}")
@@ -37,7 +29,7 @@ public class NovedadController {
         return ResponseEntity.ok(lista);
     }
 
-    @GetMapping("/cedula/{cedula}") 
+    @GetMapping("/cedula/{cedula}")
     public ResponseEntity<List<Novedad>> getPorCedula(@PathVariable String cedula) {
         List<Novedad> lista = novedadService.findByCedula(cedula);
         return ResponseEntity.ok(lista);
@@ -54,7 +46,7 @@ public class NovedadController {
 
         if (novedad.getPeriodoId() == null || novedad.getPeriodoId().isBlank()) {
             periodoNominaRepository.findTopByEstadoOrderByFechaInicioDesc("ABIERTO")
-                    .ifPresent(p -> novedad.setPeriodoId(p.getId()));
+                    .ifPresent(p -> novedad.setPeriodoId(String.valueOf(p.getId())));
         }
 
         novedad.setEstado("PENDIENTE");
@@ -64,7 +56,6 @@ public class NovedadController {
         return ResponseEntity.ok(novedadService.save(novedad));
     }
 
-    
     @PostMapping("/asignar-periodo-actual")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> asignarPeriodoActual() {
@@ -72,7 +63,7 @@ public class NovedadController {
         if (periodo.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "No hay período ABIERTO"));
         }
-        String periodoId = periodo.get().getId();
+        String periodoId = String.valueOf(periodo.get().getId());
         List<Novedad> huerfanas = novedadService.findAll().stream()
                 .filter(n -> n.getPeriodoId() == null || n.getPeriodoId().isBlank())
                 .collect(Collectors.toList());
@@ -100,50 +91,8 @@ public class NovedadController {
     @GetMapping
     public List<Novedad> todas() {
         log.info("GET /api/novedades - Iniciando");
-        List<Document> docs = directService.findAllAsDocuments();
-        log.info("Documentos obtenidos: {}", docs.size());
-
-        List<Novedad> novedades = docs.stream().map(doc -> {
-            Novedad n = new Novedad();
-            n.setId(doc.getObjectId("_id").toString());
-            n.setPeriodoId(doc.getString("periodoId"));
-            // En Mongo el campo puede estar como int32 o int64 según quién lo insertó;
-            // leerlo como Number evita el ClassCastException Integer→Long.
-            Number idEmpleado = (Number) doc.get("idEmpleado");
-            n.setIdEmpleado(idEmpleado == null ? null : idEmpleado.longValue());
-            n.setCedula(doc.getString("cedula")); // ← NUEVO
-            n.setTipoNovedad(doc.getString("tipoNovedad"));
-            n.setHoraInicio(doc.getString("horaInicio")); // ← NUEVO
-            n.setHoraFin(doc.getString("horaFin")); // ← NUEVO
-            n.setValorHora(numeroSeguro(doc, "valorHora")); // ← NUEVO
-            n.setTipoHora(doc.getString("tipoHora")); // ← NUEVO
-            n.setMonto(numeroSeguro(doc, "monto")); // ← NUEVO
-            n.setConcepto(doc.getString("concepto")); // ← NUEVO
-            n.setMotivo(doc.getString("motivo")); // ← NUEVO
-
-            if (doc.getDate("fechaInicio") != null) {
-                n.setFechaInicio(doc.getDate("fechaInicio").toInstant()
-                        .atZone(ZoneId.systemDefault()).toLocalDate());
-            }
-            if (doc.getDate("fechaFin") != null) {
-                n.setFechaFin(doc.getDate("fechaFin").toInstant()
-                        .atZone(ZoneId.systemDefault()).toLocalDate());
-            }
-
-            Number horas = (Number) doc.get("horas");
-            n.setHoras(horas == null ? null : horas.doubleValue());
-            n.setValor(numeroSeguro(doc, "valor"));
-            n.setObservaciones(doc.getString("observaciones"));
-            n.setEstado(doc.getString("estado"));
-            return n;
-        }).collect(Collectors.toList());
-
-        log.info("Novedades convertidas: {}", novedades.size());
+        List<Novedad> novedades = novedadService.findAll();
+        log.info("Novedades recuperadas: {}", novedades.size());
         return novedades;
-    }
-
-    private Double numeroSeguro(Document doc, String campo) {
-        Number numero = (Number) doc.get(campo);
-        return numero == null ? null : numero.doubleValue();
     }
 }

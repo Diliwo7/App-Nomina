@@ -39,6 +39,9 @@ public class Empleado {
     @Builder.Default
     private Long idEmpresa = 1L;
 
+    @Column(name = "id_sucursal")
+    private Long idSucursal;
+
     @Builder.Default
     private String estado = "ACTIVO";
 

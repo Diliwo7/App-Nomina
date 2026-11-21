@@ -3,13 +3,14 @@ package com.nomina.numa.service;
 
 import com.nomina.numa.dto.PagoNominaRequest;
 import com.nomina.numa.dto.NominaLiquidacionResponse;
-import com.nomina.numa.model.mongo.*;
+import com.nomina.numa.model.postgres.*;
 import com.nomina.numa.model.postgres.Empleado;
 import com.nomina.numa.repository.jpa.EmpleadoRepository;
-import com.nomina.numa.repository.mongo.*;
+import com.nomina.numa.repository.jpa.*;
 import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +42,9 @@ public class PagoNominaService {
         return mapa;
     }
 
+    @Transactional
     public PagoNomina pagarNomina(PagoNominaRequest req) {
-        PeriodoNomina periodo = periodoRepo.findById(req.getPeriodoId())
+        PeriodoNomina periodo = periodoRepo.findByIdForUpdate(Long.parseLong(req.getPeriodoId()))
                 .orElseThrow(() -> new RuntimeException("Período no encontrado"));
         if (!EstadoNominaCompat.esPeriodoAbierto(periodo.getEstado())) {
             throw new IllegalStateException("Solo se puede pagar un período abierto");
@@ -89,6 +91,7 @@ public class PagoNominaService {
                     .aportesEmpleador((double) det.getAportesEmpleador())
                     .provisionesPrestacionales((double) det.getProvisionesPrestacionales())
                     .costoTotalEmpleador((double) det.getCostoTotalEmpleador())
+                    .sueldoBase((double) det.getSueldoBase())
                     .fechaPago(LocalDate.now())
                     .metodoPago("TRANSFERENCIA")
                     .estado("PAGADO")
@@ -97,11 +100,11 @@ public class PagoNominaService {
             PagoNomina saved = pagoRepo.save(pagoEmp);
 
             List<DetallePago> detalles = new java.util.ArrayList<>();
-            detalles.add(crearDetalle(saved.getId(), det.getId(), "DEVENGO", "Sueldo Base", det.getSueldoBase()));
+            detalles.add(crearDetalle(String.valueOf(saved.getId()), det.getId(), "DEVENGO", "Sueldo Base", det.getSueldoBase()));
             det.getDetalleDevengos().forEach(concepto -> detalles.add(crearDetalle(
-                    saved.getId(), det.getId(), "DEVENGO", concepto.getConcepto(), concepto.getValor())));
+                    String.valueOf(saved.getId()), det.getId(), "DEVENGO", concepto.getConcepto(), concepto.getValor())));
             det.getDetalleDeducciones().forEach(concepto -> detalles.add(crearDetalle(
-                    saved.getId(), det.getId(), "DEDUCCION", concepto.getConcepto(), concepto.getValor())));
+                    String.valueOf(saved.getId()), det.getId(), "DEDUCCION", concepto.getConcepto(), concepto.getValor())));
             detalleRepo.saveAll(detalles);
         }
 
@@ -141,8 +144,8 @@ public class PagoNominaService {
         }
         return pagos;
     }
-    public Optional<PagoNomina> findById(String id) { return pagoRepo.findById(id); }
-    public void deleteById(String id) { pagoRepo.deleteById(id); }
+    public Optional<PagoNomina> findById(Long id) { return pagoRepo.findById(id); }
+    public void deleteById(Long id) { pagoRepo.deleteById(id); }
 
     /**
      * ✅ Corrige los pagos ya guardados que tienen nombre genérico "Empleado N",

@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,6 +18,7 @@ import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -30,15 +32,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String requestURI = request.getRequestURI();
 
-        // ✅ Validación tolerante optimizada para Railway. Permite pasar login, register y los endpoints clave de datos.
-        if (requestURI.contains("/api/auth") || 
-            requestURI.contains("/login") || 
-            requestURI.contains("/register") ||
-            requestURI.contains("/api/periodo-nomina") ||
-            requestURI.contains("/api/periodos") ||
-            requestURI.contains("/api/empleados") ||
-            requestURI.contains("/api/prediccion")) {
-            
+        if (requestURI.equals("/api/auth/login")
+                || requestURI.equals("/api/auth/register")
+                || requestURI.equals("/login")
+                || requestURI.equals("/register")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -70,7 +67,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error processing JWT: " + e.getMessage());
+            log.debug("JWT inválido en {} ({})", requestURI, e.getClass().getSimpleName());
             SecurityContextHolder.clearContext();
         }
 

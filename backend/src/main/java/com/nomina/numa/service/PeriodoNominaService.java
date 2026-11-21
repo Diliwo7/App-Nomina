@@ -1,7 +1,7 @@
 package com.nomina.numa.service;
 
-import com.nomina.numa.model.mongo.PeriodoNomina;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
+import com.nomina.numa.model.postgres.PeriodoNomina;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
 import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

@@ -1,29 +1,24 @@
 package com.nomina.numa.controller;
 
-import com.nomina.numa.model.mongo.Contratacion;
-import com.nomina.numa.model.mongo.PagoNomina;
-import com.nomina.numa.model.mongo.PeriodoNomina;
-import com.nomina.numa.model.mongo.Renuncia;
+import com.nomina.numa.model.postgres.Contratacion;
+import com.nomina.numa.model.postgres.PagoNomina;
+import com.nomina.numa.model.postgres.PeriodoNomina;
+import com.nomina.numa.model.postgres.Renuncia;
 import com.nomina.numa.model.postgres.Empleado;
 import com.nomina.numa.repository.jpa.EmpleadoRepository;
-import com.nomina.numa.repository.mongo.ContratacionRepository;
-import com.nomina.numa.repository.mongo.PagoNominaRepository;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
-import com.nomina.numa.repository.mongo.RenunciaRepository;
+import com.nomina.numa.repository.jpa.ContratacionRepository;
+import com.nomina.numa.repository.jpa.PagoNominaRepository;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
+import com.nomina.numa.repository.jpa.RenunciaRepository;
 import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
 
 @RestController
 @RequestMapping("/api/historial")
@@ -34,7 +29,7 @@ public class HistorialController {
     private final ContratacionRepository contratacionRepository;
     private final PeriodoNominaRepository periodoNominaRepository;
     private final RenunciaRepository renunciaRepository;
-    private final MongoTemplate mongoTemplate;
+    private final PagoNominaRepository pagoNominaRepository;
 
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ISO_LOCAL_DATE;
 
@@ -57,11 +52,11 @@ public class HistorialController {
         List<PeriodoNomina> periodos = periodoNominaRepository.findAll();
         List<Renuncia> renuncias = renunciaRepository.findAll();
         Map<String, PeriodoNomina> periodosPorId = periodos.stream()
-            .filter(p -> p.getId() != null)
-            .collect(Collectors.toMap(PeriodoNomina::getId, p -> p, (a, b) -> a));
+                .filter(p -> p.getId() != null)
+                .collect(Collectors.toMap(p -> String.valueOf(p.getId()), p -> p, (a, b) -> a));
         Map<Long, Empleado> empleadosPorId = empleados.stream()
-            .filter(e -> e.getId() != null)
-            .collect(Collectors.toMap(Empleado::getId, e -> e, (a, b) -> a));
+                .filter(e -> e.getId() != null)
+                .collect(Collectors.toMap(Empleado::getId, e -> e, (a, b) -> a));
 
         // Mapa idEmpleado -> contrataciones
         Map<Long, List<Contratacion>> contratosPorEmpleado = contrataciones.stream()
@@ -79,6 +74,23 @@ public class HistorialController {
 
             String categoria;
             LocalDate fechaFin = e.getFechaFinContrato();
+            if (fechaFin == null && !contratos.isEmpty()) {
+                fechaFin = contratos.stream()
+                        .map(Contratacion::getFechaFin)
+                        .filter(Objects::nonNull)
+                        .max(LocalDate::compareTo)
+                        .orElse(null);
+            }
+
+            LocalDate fechaInicio = e.getFechaInicioContrato();
+            if (fechaInicio == null && !contratos.isEmpty()) {
+                fechaInicio = contratos.stream()
+                        .map(Contratacion::getFechaInicio)
+                        .filter(Objects::nonNull)
+                        .min(LocalDate::compareTo)
+                        .orElse(null);
+            }
+
             boolean contratoVencido = fechaFin != null && fechaFin.isBefore(hoy);
 
             switch (estadoUpper) {
@@ -89,7 +101,8 @@ public class HistorialController {
                     } else {
                         categoria = "EN_EMPRESA";
                         activos++;
-                        if (e.getSalarioBase() != null) nominaActiva += e.getSalarioBase();
+                        if (e.getSalarioBase() != null)
+                            nominaActiva += e.getSalarioBase();
                     }
                 }
                 case "INACTIVO" -> {
@@ -107,7 +120,8 @@ public class HistorialController {
                 default -> {
                     categoria = "EN_EMPRESA";
                     activos++;
-                    if (e.getSalarioBase() != null) nominaActiva += e.getSalarioBase();
+                    if (e.getSalarioBase() != null)
+                        nominaActiva += e.getSalarioBase();
                 }
             }
 
@@ -122,9 +136,11 @@ public class HistorialController {
             item.put("estado", estadoUpper);
             item.put("categoria", categoria);
             item.put("fechaCreacion", e.getFechaCreacion() == null ? null : e.getFechaCreacion().format(FECHA));
-            item.put("fechaInicioContrato", e.getFechaInicioContrato() == null ? null : e.getFechaInicioContrato().format(FECHA));
+            item.put("fechaInicioContrato",
+                    fechaInicio == null ? null : fechaInicio.format(FECHA));
             item.put("fechaFinContrato", fechaFin == null ? null : fechaFin.format(FECHA));
-            item.put("contratosVigentes", contratos.stream().filter(c -> EstadoNominaCompat.esContratacionVigente(c.getEstado())).count());
+            item.put("contratosVigentes",
+                    contratos.stream().filter(c -> EstadoNominaCompat.esContratacionVigente(c.getEstado())).count());
             item.put("totalContratos", contratos.size());
             empleadosClasificados.add(item);
         }
@@ -140,7 +156,8 @@ public class HistorialController {
             if (e.getFechaCreacion() != null) {
                 eventos.add(evento("REGISTRO", "Registro en el sistema",
                         e.getFechaCreacion(), e.getId(), nombre, e.getNumeroDocumento(), e.getCargo(),
-                        "El empleado fue registrado con salario de $" + (e.getSalarioBase() == null ? "N/A" : String.format("%,.0f", e.getSalarioBase())),
+                        "El empleado fue registrado con salario de $"
+                                + (e.getSalarioBase() == null ? "N/A" : String.format("%,.0f", e.getSalarioBase())),
                         "INFO"));
             }
 
@@ -161,11 +178,12 @@ public class HistorialController {
                         e.getFechaFinContrato(), e.getId(), nombre, e.getNumeroDocumento(), e.getCargo(),
                         esLiquidado
                                 ? "El empleado fue liquidado y salió de la empresa"
-                                : (vencido ? "El contrato finalizó" : "El contrato termina el " + e.getFechaFinContrato().format(FECHA)),
+                                : (vencido ? "El contrato finalizó"
+                                        : "El contrato termina el " + e.getFechaFinContrato().format(FECHA)),
                         esLiquidado ? "ALTA" : (vencido ? "MEDIA" : "INFO")));
             }
 
-            // 4) Contrataciones de Mongo (histórico completo)
+            // 4) Contrataciones (histórico completo)
             for (Contratacion c : contratosPorEmpleado.getOrDefault(e.getId(), List.of())) {
                 String estadoC = (c.getEstado() == null ? "" : c.getEstado()).toUpperCase();
                 eventos.add(evento("CONTRATACION", "Contratación " + estadoC,
@@ -177,39 +195,44 @@ public class HistorialController {
             }
         }
 
-            // La aceptación de renuncia y el pago de la liquidación son hitos separados.
-            for (Renuncia renuncia : renuncias) {
-                if (renuncia.getIdEmpleado() == null) continue;
-                Empleado empleado = empleadosPorId.get(renuncia.getIdEmpleado());
-                String nombre = empleado != null ? nombreCompleto(empleado)
+        // La aceptación de renuncia y el pago de la liquidación son hitos separados.
+        for (Renuncia renuncia : renuncias) {
+            if (renuncia.getIdEmpleado() == null)
+                continue;
+            Empleado empleado = empleadosPorId.get(renuncia.getIdEmpleado());
+            String nombre = empleado != null ? nombreCompleto(empleado)
                     : (renuncia.getNombreEmpleado() == null ? "Empleado histórico" : renuncia.getNombreEmpleado());
-                String documento = empleado == null ? null : empleado.getNumeroDocumento();
-                String cargo = empleado == null ? renuncia.getCargoEmpleado() : empleado.getCargo();
-                if (renuncia.getFechaEnvio() != null) {
+            String documento = empleado == null ? null : empleado.getNumeroDocumento();
+            String cargo = empleado == null ? renuncia.getCargoEmpleado() : empleado.getCargo();
+            if (renuncia.getFechaEnvio() != null) {
                 eventos.add(evento("RENUNCIA", "Renuncia · " + estadoTexto(renuncia.getEstado()),
-                    renuncia.getFechaEnvio(), renuncia.getIdEmpleado(), nombre, documento, cargo,
-                    "Solicitud de renuncia · Motivo: " + (renuncia.getMotivo() == null ? "N/A" : renuncia.getMotivo()),
-                    "ACEPTADA".equalsIgnoreCase(renuncia.getEstado()) ? "MEDIA" : "INFO"));
-                }
-                if (renuncia.getFechaAceptacion() != null) {
-                Map<String, Object> eventoLiquidacion = evento("LIQUIDACION", "Liquidación calculada",
-                    renuncia.getFechaAceptacion(), renuncia.getIdEmpleado(), nombre, documento, cargo,
-                    "Estado del pago: " + estadoTexto(renuncia.getEstadoPago()) + " · Valor: $"
-                        + formatoMoneda(renuncia.getLiquidacionEstimada()), "ALTA");
-                eventoLiquidacion.put("estadoPago", renuncia.getEstadoPago() == null
-                    ? "" : renuncia.getEstadoPago().toUpperCase(Locale.ROOT));
-                eventos.add(eventoLiquidacion);
-                }
-                if (renuncia.getFechaPago() != null || "PAGADO".equalsIgnoreCase(renuncia.getEstadoPago())) {
-                Map<String, Object> eventoPagoLiquidacion = evento("PAGO_LIQUIDACION",
-                    "Pago de liquidación · " + estadoTexto(renuncia.getEstadoPago()),
-                    renuncia.getFechaPago(), renuncia.getIdEmpleado(), nombre, documento, cargo,
-                    "Liquidación pagada · Valor: $" + formatoMoneda(renuncia.getLiquidacionEstimada()), "ALTA");
-                eventoPagoLiquidacion.put("estadoPago", renuncia.getEstadoPago() == null
-                    ? "" : renuncia.getEstadoPago().toUpperCase(Locale.ROOT));
-                eventos.add(eventoPagoLiquidacion);
-                }
+                        renuncia.getFechaEnvio(), renuncia.getIdEmpleado(), nombre, documento, cargo,
+                        "Solicitud de renuncia · Motivo: "
+                                + (renuncia.getMotivo() == null ? "N/A" : renuncia.getMotivo()),
+                        "ACEPTADA".equalsIgnoreCase(renuncia.getEstado()) ? "MEDIA" : "INFO"));
             }
+            if (renuncia.getFechaAceptacion() != null) {
+                Map<String, Object> eventoLiquidacion = evento("LIQUIDACION", "Liquidación calculada",
+                        renuncia.getFechaAceptacion(), renuncia.getIdEmpleado(), nombre, documento, cargo,
+                        "Estado del pago: " + estadoTexto(renuncia.getEstadoPago()) + " · Valor: $"
+                                + formatoMoneda(renuncia.getLiquidacionEstimada()),
+                        "ALTA");
+                eventoLiquidacion.put("estadoPago", renuncia.getEstadoPago() == null
+                        ? ""
+                        : renuncia.getEstadoPago().toUpperCase(Locale.ROOT));
+                eventos.add(eventoLiquidacion);
+            }
+            if (renuncia.getFechaPago() != null || "PAGADO".equalsIgnoreCase(renuncia.getEstadoPago())) {
+                Map<String, Object> eventoPagoLiquidacion = evento("PAGO_LIQUIDACION",
+                        "Pago de liquidación · " + estadoTexto(renuncia.getEstadoPago()),
+                        renuncia.getFechaPago(), renuncia.getIdEmpleado(), nombre, documento, cargo,
+                        "Liquidación pagada · Valor: $" + formatoMoneda(renuncia.getLiquidacionEstimada()), "ALTA");
+                eventoPagoLiquidacion.put("estadoPago", renuncia.getEstadoPago() == null
+                        ? ""
+                        : renuncia.getEstadoPago().toUpperCase(Locale.ROOT));
+                eventos.add(eventoPagoLiquidacion);
+            }
+        }
 
         // Ordenar eventos: más recientes primero
         eventos.sort(this::compararEventosPorFecha);
@@ -240,15 +263,15 @@ public class HistorialController {
         String est = estado.toUpperCase().trim();
         Long idEmpleadoFiltro = parsearId(empleadoId);
         List<Map<String, Object>> filtrados = empleadosClasificados.stream()
-            .filter(emp -> idEmpleadoFiltro == null || idEmpleadoFiltro.equals(emp.get("id")))
+                .filter(emp -> idEmpleadoFiltro == null || idEmpleadoFiltro.equals(emp.get("id")))
                 .filter(emp -> est.isEmpty() || est.equals(emp.get("categoria")))
                 .filter(emp -> q.isEmpty()
-                || normalizar(String.valueOf(emp.get("nombreCompleto"))).contains(q)
-                || normalizar(String.valueOf(emp.get("numeroDocumento"))).contains(q))
+                        || normalizar(String.valueOf(emp.get("nombreCompleto"))).contains(q)
+                        || normalizar(String.valueOf(emp.get("numeroDocumento"))).contains(q))
                 .collect(Collectors.toList());
         Set<Long> idsFiltrados = filtrados.stream()
-            .map(emp -> (Long) emp.get("id"))
-            .collect(Collectors.toSet());
+                .map(emp -> (Long) emp.get("id"))
+                .collect(Collectors.toSet());
         LocalDate fechaDesde = parsearFecha(desde);
         LocalDate fechaHasta = parsearFecha(hasta);
         String tipoFiltro = tipo.toUpperCase(Locale.ROOT).trim();
@@ -274,44 +297,11 @@ public class HistorialController {
                         && !LocalDate.parse((String) ev.get("fecha")).isBefore(fechaDesde)))
                 .filter(ev -> fechaHasta == null || (ev.get("fecha") != null
                         && !LocalDate.parse((String) ev.get("fecha")).isAfter(fechaHasta)))
-            .collect(Collectors.toList());
+                .collect(Collectors.toList());
 
         eventosNoPago.sort(this::compararEventosPorFecha);
-        List<Criteria> condicionesPago = new ArrayList<>();
-        condicionesPago.add(Criteria.where("idEmpleado").ne(null));
-        if (!estadoPagoFiltro.isEmpty()) condicionesPago.add(Criteria.where("estado").is(estadoPagoFiltro));
-        if (fechaDesde != null || fechaHasta != null) {
-            Criteria fechaPago = Criteria.where("fechaPago");
-            if (fechaDesde != null) fechaPago.gte(fechaDesde);
-            if (fechaHasta != null) fechaPago.lte(fechaHasta);
-            condicionesPago.add(fechaPago);
-        }
-        if (idEmpleadoFiltro != null) {
-            condicionesPago.add(Criteria.where("idEmpleado").is(idEmpleadoFiltro));
-        } else if (!est.isEmpty()) {
-            condicionesPago.add(idsFiltrados.isEmpty()
-                    ? Criteria.where("idEmpleado").is(-1L)
-                    : Criteria.where("idEmpleado").in(idsFiltrados));
-        } else if (!q.isEmpty()) {
-            List<Criteria> coincidencias = new ArrayList<>();
-            if (!idsFiltrados.isEmpty()) coincidencias.add(Criteria.where("idEmpleado").in(idsFiltrados));
-            coincidencias.add(Criteria.where("nombreEmpleado").regex(Pattern.quote(busqueda.trim()), "i"));
-            condicionesPago.add(new Criteria().orOperator(coincidencias.toArray(Criteria[]::new)));
-        }
-        if (!frecuenciaFiltro.isEmpty()) {
-            List<String> idsPeriodo = periodos.stream()
-                    .filter(periodo -> frecuenciaPeriodo(periodo).equalsIgnoreCase(frecuenciaFiltro))
-                    .map(PeriodoNomina::getId)
-                    .filter(Objects::nonNull)
-                    .toList();
-            condicionesPago.add(idsPeriodo.isEmpty()
-                    ? Criteria.where("idNomina").is("__sin_periodo__")
-                    : Criteria.where("idNomina").in(idsPeriodo));
-        }
-        Criteria criteriosPago = new Criteria().andOperator(condicionesPago.toArray(Criteria[]::new));
-        Query consultaConteoPagos = new Query(criteriosPago);
-        long pagosTotal = incluirPagos ? mongoTemplate.count(consultaConteoPagos, PagoNomina.class) : 0;
-        if (!incluirPagos) eventosNoPago.removeIf(ev -> "PAGO_NOMINA".equals(ev.get("tipo")));
+        if (!incluirPagos)
+            eventosNoPago.removeIf(ev -> "PAGO_NOMINA".equals(ev.get("tipo")));
 
         int paginaSegura = Math.max(0, pagina);
         int tamanoSeguro = Math.max(1, Math.min(tamano, 500));
@@ -320,15 +310,15 @@ public class HistorialController {
         int candidatosNoPago = (int) Math.min(finPagina, eventosNoPago.size());
         List<Map<String, Object>> candidatos = new ArrayList<>(eventosNoPago.subList(0, candidatosNoPago));
 
-        long candidatosPago = incluirPagos ? Math.min(finPagina, pagosTotal) : 0;
-        if (candidatosPago > 0) {
-            Query consultaPagos = new Query(criteriosPago)
-                    .with(Sort.by(Sort.Order.desc("fechaPago"), Sort.Order.desc("id")))
-                    .limit((int) candidatosPago);
-            List<PagoNomina> pagosPagina = mongoTemplate.find(consultaPagos, PagoNomina.class);
-            for (PagoNomina pago : pagosPagina) {
+        long pagosTotal = 0;
+        Sort ordenPagos = Sort.by(Sort.Order.desc("fechaPago"), Sort.Order.desc("id"));
+        if (incluirPagos) {
+            List<PagoNomina> pagosFiltrados = filtrarPagos(estadoPagoFiltro, fechaDesde, fechaHasta,
+                    idEmpleadoFiltro, idsFiltrados, ordenPagos, finPagina);
+            for (PagoNomina pago : pagosFiltrados) {
                 candidatos.add(eventoPagoNomina(pago, periodosPorId, empleadosPorId));
             }
+            pagosTotal = pagosFiltrados.size();
         }
         candidatos.sort(this::compararEventosPorFecha);
         int desdeIndice = (int) Math.min(inicio, candidatos.size());
@@ -341,26 +331,53 @@ public class HistorialController {
             eventosNoPago.stream().map(ev -> ev.get("empleadoId"))
                     .filter(Long.class::isInstance).map(Long.class::cast).forEach(empleadosConEventosSet::add);
             if (incluirPagos) {
-                mongoTemplate.findDistinct(new Query(criteriosPago), "idEmpleado", PagoNomina.class, Long.class)
-                        .forEach(empleadosConEventosSet::add);
+                List<PagoNomina> pagosConEventos = filtrarPagos(estadoPagoFiltro, fechaDesde, fechaHasta,
+                        idEmpleadoFiltro, idsFiltrados, ordenPagos, null);
+                pagosConEventos.stream().map(PagoNomina::getIdEmpleado)
+                        .filter(Objects::nonNull).forEach(empleadosConEventosSet::add);
             }
         }
 
         Map<String, Object> respuesta = new HashMap<>();
         respuesta.put("resumen", resumen);
         respuesta.put("empleados", filtrados);
-                respuesta.put("eventos", eventosPagina);
-                respuesta.put("eventosTotal", eventosTotal);
-                respuesta.put("paginaEventos", paginaSegura);
-                respuesta.put("paginasEventos", (int) Math.ceil(eventosTotal / (double) tamanoSeguro));
-                respuesta.put("empleadosConEventos", new ArrayList<>(empleadosConEventosSet));
+        respuesta.put("eventos", eventosPagina);
+        respuesta.put("eventosTotal", eventosTotal);
+        respuesta.put("paginaEventos", paginaSegura);
+        respuesta.put("paginasEventos", (int) Math.ceil(eventosTotal / (double) tamanoSeguro));
+        respuesta.put("empleadosConEventos", new ArrayList<>(empleadosConEventosSet));
         respuesta.put("generadoEn", hoy.format(FECHA));
         return respuesta;
     }
 
+    private String condicionesPagoEstado;
+
+    private List<PagoNomina> filtrarPagos(String estadoPagoFiltro, LocalDate fechaDesde, LocalDate fechaHasta,
+            Long idEmpleadoFiltro, Set<Long> idsFiltrados,
+            Sort ordenPagos, Long limite) {
+        List<PagoNomina> pagos = pagoNominaRepository.findAll(ordenPagos);
+        List<PagoNomina> resultado = new ArrayList<>();
+        for (PagoNomina pago : pagos) {
+            if (pago.getIdEmpleado() == null)
+                continue;
+            if (!estadoPagoFiltro.isEmpty() && !estadoPagoFiltro.equalsIgnoreCase(pago.getEstado()))
+                continue;
+            if (fechaDesde != null && (pago.getFechaPago() == null || pago.getFechaPago().isBefore(fechaDesde)))
+                continue;
+            if (fechaHasta != null && (pago.getFechaPago() == null || pago.getFechaPago().isAfter(fechaHasta)))
+                continue;
+            if (idEmpleadoFiltro != null && !idEmpleadoFiltro.equals(pago.getIdEmpleado()))
+                continue;
+            if (idEmpleadoFiltro == null && !idsFiltrados.isEmpty() && !idsFiltrados.contains(pago.getIdEmpleado()))
+                continue;
+            resultado.add(pago);
+        }
+        return limite == null ? resultado : resultado.stream().limit(limite).collect(Collectors.toList());
+    }
+
     private Map<String, Object> evento(String tipo, String titulo, LocalDate fecha, Long empleadoId,
-                                       String nombre, String documento, String cargo,
-                                       String detalle, String nivel) {
+            String nombre, String documento, String cargo,
+            String detalle, String nivel) {
         Map<String, Object> ev = new HashMap<>();
         ev.put("tipo", tipo);
         ev.put("empleadoId", empleadoId);
@@ -374,41 +391,43 @@ public class HistorialController {
         return ev;
     }
 
-        private Map<String, Object> eventoPagoNomina(PagoNomina pago,
-                              Map<String, PeriodoNomina> periodosPorId,
-                              Map<Long, Empleado> empleadosPorId) {
+    private Map<String, Object> eventoPagoNomina(PagoNomina pago,
+            Map<String, PeriodoNomina> periodosPorId,
+            Map<Long, Empleado> empleadosPorId) {
         Empleado empleado = empleadosPorId.get(pago.getIdEmpleado());
         PeriodoNomina periodo = periodosPorId.get(pago.getIdNomina());
         String nombre = empleado != null ? nombreCompleto(empleado)
-            : (pago.getNombreEmpleado() == null ? "Empleado histórico" : pago.getNombreEmpleado());
+                : (pago.getNombreEmpleado() == null ? "Empleado histórico" : pago.getNombreEmpleado());
         String documento = empleado == null ? null : empleado.getNumeroDocumento();
         String cargo = empleado == null ? null : empleado.getCargo();
         LocalDate fecha = pago.getFechaPago() != null ? pago.getFechaPago()
-            : periodo == null ? null : periodo.getFechaFin();
+                : periodo == null ? null : periodo.getFechaFin();
         String frecuencia = periodo == null ? "Frecuencia no disponible" : frecuenciaPeriodo(periodo);
         String periodoTexto = periodo == null ? "Período no disponible" : descripcionPeriodo(periodo);
         Map<String, Object> ev = evento("PAGO_NOMINA", "Pago de nómina · " + estadoTexto(pago.getEstado()),
-            fecha, pago.getIdEmpleado(), nombre, documento, cargo,
-            frecuencia + " · " + periodoTexto + " · Total: $" + formatoMoneda(pago.getTotalPagar())
-                + " · Método: " + (pago.getMetodoPago() == null ? "N/A" : pago.getMetodoPago()),
-            "PAGADO".equalsIgnoreCase(pago.getEstado()) ? "INFO" : "MEDIA");
+                fecha, pago.getIdEmpleado(), nombre, documento, cargo,
+                frecuencia + " · " + periodoTexto + " · Total: $" + formatoMoneda(pago.getTotalPagar())
+                        + " · Método: " + (pago.getMetodoPago() == null ? "N/A" : pago.getMetodoPago()),
+                "PAGADO".equalsIgnoreCase(pago.getEstado()) ? "INFO" : "MEDIA");
         ev.put("frecuencia", frecuencia.toUpperCase(Locale.ROOT));
         ev.put("estadoPago", pago.getEstado() == null ? "" : pago.getEstado().toUpperCase(Locale.ROOT));
         return ev;
-        }
+    }
 
-        private int compararEventosPorFecha(Map<String, Object> a, Map<String, Object> b) {
+    private int compararEventosPorFecha(Map<String, Object> a, Map<String, Object> b) {
         String fechaA = (String) a.get("fecha");
         String fechaB = (String) b.get("fecha");
-        if (fechaA == null) return fechaB == null ? 0 : 1;
-        if (fechaB == null) return -1;
+        if (fechaA == null)
+            return fechaB == null ? 0 : 1;
+        if (fechaB == null)
+            return -1;
         return fechaB.compareTo(fechaA);
-        }
+    }
 
-        private boolean filtroMovimientoVacio(String tipo, String frecuencia, String estadoPago,
-                           LocalDate desde, LocalDate hasta) {
+    private boolean filtroMovimientoVacio(String tipo, String frecuencia, String estadoPago,
+            LocalDate desde, LocalDate hasta) {
         return tipo.isEmpty() && frecuencia.isEmpty() && estadoPago.isEmpty() && desde == null && hasta == null;
-        }
+    }
 
     private String nombreCompleto(Empleado empleado) {
         return ((empleado.getNombre() == null ? "" : empleado.getNombre().trim()) + " "
@@ -417,15 +436,18 @@ public class HistorialController {
 
     private String descripcionPeriodo(PeriodoNomina periodo) {
         String descripcion = periodo.getDescription();
-        String rango = periodo.getFechaInicio() == null ? "" : periodo.getFechaInicio().format(FECHA)
-                + " a " + (periodo.getFechaFin() == null ? "N/A" : periodo.getFechaFin().format(FECHA));
+        String rango = periodo.getFechaInicio() == null ? ""
+                : periodo.getFechaInicio().format(FECHA)
+                        + " a " + (periodo.getFechaFin() == null ? "N/A" : periodo.getFechaFin().format(FECHA));
         return descripcion + (rango.isBlank() ? "" : " (" + rango + ")");
     }
 
     private String frecuenciaPeriodo(PeriodoNomina periodo) {
         String tipo = periodo.getTipo() == null ? "" : periodo.getTipo().toUpperCase(Locale.ROOT);
-        if (tipo.contains("MENS") || tipo.contains("MES")) return "Mensual";
-        if (tipo.contains("QUINC") || tipo.contains("1RA") || tipo.contains("2DA")) return "Quincenal";
+        if (tipo.contains("MENS") || tipo.contains("MES"))
+            return "Mensual";
+        if (tipo.contains("QUINC") || tipo.contains("1RA") || tipo.contains("2DA"))
+            return "Quincenal";
         if (periodo.getFechaInicio() != null && periodo.getFechaFin() != null
                 && java.time.temporal.ChronoUnit.DAYS.between(periodo.getFechaInicio(), periodo.getFechaFin()) >= 25) {
             return "Mensual";
@@ -447,7 +469,8 @@ public class HistorialController {
     }
 
     private LocalDate parsearFecha(String fecha) {
-        if (fecha == null || fecha.isBlank()) return null;
+        if (fecha == null || fecha.isBlank())
+            return null;
         try {
             return LocalDate.parse(fecha);
         } catch (java.time.format.DateTimeParseException ignored) {
@@ -456,7 +479,8 @@ public class HistorialController {
     }
 
     private Long parsearId(String id) {
-        if (id == null || id.isBlank()) return null;
+        if (id == null || id.isBlank())
+            return null;
         try {
             return Long.parseLong(id);
         } catch (NumberFormatException ignored) {

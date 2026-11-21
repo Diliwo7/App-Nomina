@@ -1,7 +1,7 @@
 package com.nomina.numa.service;
 
-import com.nomina.numa.model.mongo.Contratacion;
-import com.nomina.numa.repository.mongo.ContratacionRepository;
+import com.nomina.numa.model.postgres.Contratacion;
+import com.nomina.numa.repository.jpa.ContratacionRepository;
 import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,7 +30,7 @@ public class ContratacionService {
         return repo.save(contratacion);
     }
 
-    public Contratacion updateEstado(String id, String estado) {
+    public Contratacion updateEstado(Long id, String estado) {
         Optional<Contratacion> contratoOpt = repo.findById(id);
         if (contratoOpt.isPresent()) {
             Contratacion contrato = contratoOpt.get();

@@ -6,8 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import com.nomina.numa.model.mongo.PeriodoNomina;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
+import com.nomina.numa.model.postgres.PeriodoNomina;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
 
 import java.util.*;
 

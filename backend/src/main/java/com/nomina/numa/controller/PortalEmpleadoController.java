@@ -1,20 +1,24 @@
 package com.nomina.numa.controller;
 
-import com.nomina.numa.model.mongo.Novedad;
-import com.nomina.numa.model.mongo.Renuncia;
+import com.nomina.numa.model.postgres.Novedad;
+import com.nomina.numa.model.postgres.Renuncia;
 import com.nomina.numa.model.postgres.Empleado;
 import com.nomina.numa.repository.jpa.EmpleadoRepository;
-import com.nomina.numa.repository.mongo.NovedadRepository;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
-import com.nomina.numa.repository.mongo.RenunciaRepository;
+import com.nomina.numa.repository.jpa.NovedadRepository;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
+import com.nomina.numa.repository.jpa.RenunciaRepository;
 import com.nomina.numa.security.JwtUtil;
 import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.text.Normalizer;
 import java.time.LocalDate;
@@ -48,14 +52,27 @@ public class PortalEmpleadoController {
             return ResponseEntity.badRequest().body(Map.of("error", "Nombre y cédula son obligatorios"));
         }
 
-        // Busca por cédula exacta y nombre (primero o segundo nombre)
+        // Busca por cédula exacta y nombre flexible (permite nombres parciales,
+        // completos y estado activo o inactivo)
         List<Empleado> candidatos = empleadoRepository.findAll().stream()
                 .filter(e -> Objects.equals(
                         e.getNumeroDocumento() == null ? null : e.getNumeroDocumento().trim(),
                         cedula))
-                .filter(e -> EstadoNominaCompat.esEmpleadoActivo(e.getEstado()))
-                .filter(e -> normalizar(e.getNombre() + " " + e.getApellido()).contains(normalizar(nombre))
-                        || normalizar(e.getNombre()).contains(normalizar(nombre)))
+                .filter(e -> {
+                    String nombreCompleto = normalizar(e.getNombre() + " " + e.getApellido());
+                    String inputNorm = normalizar(nombre);
+                    if (nombreCompleto.contains(inputNorm) || inputNorm.contains(nombreCompleto)) {
+                        return true;
+                    }
+                    String[] partesInput = inputNorm.split("\\s+");
+                    int coincidencias = 0;
+                    for (String parte : partesInput) {
+                        if (parte.length() >= 2 && nombreCompleto.contains(parte)) {
+                            coincidencias++;
+                        }
+                    }
+                    return coincidencias > 0;
+                })
                 .toList();
 
         if (candidatos.isEmpty()) {
@@ -87,9 +104,13 @@ public class PortalEmpleadoController {
 
     // ===== 2. MI NÓMINA (resumen) =====
     @GetMapping("/{id}/resumen")
-    public ResponseEntity<?> resumen(@PathVariable Long id) {
+    public ResponseEntity<?> resumen(
+            @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+        validarEmpleado(authorization, id);
         Optional<Empleado> optEmp = empleadoRepository.findById(id);
-        if (optEmp.isEmpty()) return ResponseEntity.notFound().build();
+        if (optEmp.isEmpty())
+            return ResponseEntity.notFound().build();
         Empleado emp = optEmp.get();
 
         double salarioBase = emp.getSalarioBase() != null ? emp.getSalarioBase() : 0.0;
@@ -102,13 +123,16 @@ public class PortalEmpleadoController {
         for (Novedad n : aprobadas) {
             double valor = n.getValor() != null ? n.getValor() : (n.getMonto() != null ? n.getMonto() : 0.0);
             boolean esDeduccion = esDeduccion(n.getTipoNovedad());
-            if (esDeduccion) deducciones += valor; else devengos += valor;
+            if (esDeduccion)
+                deducciones += valor;
+            else
+                devengos += valor;
             Map<String, Object> d = new LinkedHashMap<>();
             d.put("tipo", n.getTipoNovedad());
             d.put("concepto", n.getConcepto() != null ? n.getConcepto()
                     : n.getMotivo() != null ? n.getMotivo()
-                    : n.getObservaciones() != null ? n.getObservaciones()
-                    : n.getTipoNovedad());
+                            : n.getObservaciones() != null ? n.getObservaciones()
+                                    : n.getTipoNovedad());
             d.put("valor", valor);
             d.put("esDeduccion", esDeduccion);
             d.put("fecha", n.getFechaInicio() != null ? n.getFechaInicio().toString() : null);
@@ -133,7 +157,10 @@ public class PortalEmpleadoController {
 
     // ===== 3. NOVEDADES (lista con estado) =====
     @GetMapping("/{id}/novedades")
-    public ResponseEntity<List<Novedad>> novedades(@PathVariable Long id) {
+    public ResponseEntity<List<Novedad>> novedades(
+            @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+        validarEmpleado(authorization, id);
         List<Novedad> lista = novedadRepository.findByIdEmpleado(id).stream()
                 .sorted(Comparator.comparing(Novedad::getId).reversed())
                 .toList();
@@ -142,9 +169,14 @@ public class PortalEmpleadoController {
 
     // ===== 4. CREAR NOVEDAD =====
     @PostMapping("/{id}/novedades")
-    public ResponseEntity<?> crearNovedad(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> crearNovedad(
+            @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestBody Map<String, Object> body) {
+        validarEmpleado(authorization, id);
         Optional<Empleado> optEmp = empleadoRepository.findById(id);
-        if (optEmp.isEmpty()) return ResponseEntity.notFound().build();
+        if (optEmp.isEmpty())
+            return ResponseEntity.notFound().build();
         Empleado emp = optEmp.get();
 
         String tipo = (String) body.getOrDefault("tipoNovedad", "OTRO");
@@ -160,7 +192,7 @@ public class PortalEmpleadoController {
 
         // Asociar al período ABIERTO actual
         periodoNominaRepository.findTopByEstadoOrderByFechaInicioDesc("ABIERTO")
-                .ifPresent(p -> n.setPeriodoId(p.getId()));
+                .ifPresent(p -> n.setPeriodoId(String.valueOf(p.getId())));
 
         // Fechas
         try {
@@ -174,7 +206,8 @@ public class PortalEmpleadoController {
 
         // Valor según tipo
         double valor = body.get("valor") != null ? Double.parseDouble(body.get("valor").toString()) : 0;
-        if (valor > 0) n.setValor(valor);
+        if (valor > 0)
+            n.setValor(valor);
         if (tipo.equals("HORAS_EXTRAS")) {
             double horas = body.get("horas") != null ? Double.parseDouble(body.get("horas").toString()) : 0;
             n.setHoras(horas);
@@ -195,7 +228,10 @@ public class PortalEmpleadoController {
 
     /** Estado de la renuncia actual + liquidación estimada si está aceptada. */
     @GetMapping("/{id}/renuncia")
-    public ResponseEntity<?> renuncia(@PathVariable Long id) {
+    public ResponseEntity<?> renuncia(
+            @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+        validarEmpleado(authorization, id);
         List<Renuncia> activas = renunciaRepository.findByIdEmpleadoAndEstadoInOrderByIdDesc(
                 id, List.of("ENVIADA", "ACEPTADA"));
 
@@ -211,9 +247,14 @@ public class PortalEmpleadoController {
 
     /** Crear y enviar carta de renuncia (autogenerada). */
     @PostMapping("/{id}/renuncia")
-    public ResponseEntity<?> enviarRenuncia(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> enviarRenuncia(
+            @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestBody Map<String, String> body) {
+        validarEmpleado(authorization, id);
         Optional<Empleado> optEmp = empleadoRepository.findById(id);
-        if (optEmp.isEmpty()) return ResponseEntity.notFound().build();
+        if (optEmp.isEmpty())
+            return ResponseEntity.notFound().build();
         Empleado emp = optEmp.get();
 
         // Ya existe una activa? no permitir duplicar
@@ -242,11 +283,13 @@ public class PortalEmpleadoController {
         return ResponseEntity.ok(renunciaRepository.save(r));
     }
 
-    /**  Subir PDF de la carta de renuncia (multipart). */
+    /** Subir PDF de la carta de renuncia (multipart). */
     @PostMapping("/{id}/renuncia/pdf")
     public ResponseEntity<?> subirPdfRenuncia(
             @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestParam("archivo") MultipartFile archivo) {
+        validarEmpleado(authorization, id);
         try {
             if (archivo == null || archivo.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "No se recibió ningún archivo"));
@@ -281,12 +324,22 @@ public class PortalEmpleadoController {
         }
     }
 
-    /**  Descargar el PDF adjunto de la renuncia. */
+    /** Descargar el PDF adjunto de la renuncia. */
     @GetMapping("/renuncia/{idRenuncia}/pdf")
-    public ResponseEntity<byte[]> descargarPdf(@PathVariable String idRenuncia) {
-        Optional<Renuncia> opt = renunciaRepository.findById(idRenuncia);
+    public ResponseEntity<byte[]> descargarPdf(
+            @PathVariable String idRenuncia,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            Authentication authentication) {
+        Optional<Renuncia> opt = renunciaRepository.findById(Long.parseLong(idRenuncia));
         if (opt.isEmpty() || opt.get().getPdfBase64() == null) {
             return ResponseEntity.notFound().build();
+        }
+        Renuncia renuncia = opt.get();
+        boolean administrador = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+        if (!administrador && !Objects.equals(
+                obtenerEmpleadoAutenticado(authorization), renuncia.getIdEmpleado())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes consultar esta carta.");
         }
         byte[] bytes = Base64.getDecoder().decode(opt.get().getPdfBase64());
         String nombre = opt.get().getNombrePdf() != null ? opt.get().getNombrePdf()
@@ -299,7 +352,10 @@ public class PortalEmpleadoController {
 
     /** Retirar la solicitud de renuncia. */
     @PostMapping("/{id}/renuncia/retirar")
-    public ResponseEntity<?> retirarRenuncia(@PathVariable Long id) {
+    public ResponseEntity<?> retirarRenuncia(
+            @PathVariable Long id,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+        validarEmpleado(authorization, id);
         List<Renuncia> activas = renunciaRepository.findByIdEmpleadoAndEstadoInOrderByIdDesc(
                 id, List.of("ENVIADA", "ACEPTADA"));
         if (activas.isEmpty()) {
@@ -307,7 +363,8 @@ public class PortalEmpleadoController {
         }
         Renuncia r = activas.get(0);
         if ("ACEPTADA".equalsIgnoreCase(r.getEstado())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "La renuncia ya fue aceptada y no se puede retirar"));
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "La renuncia ya fue aceptada y no se puede retirar"));
         }
         r.setEstado("RETIRADA");
         r.setUpdatedAt(LocalDateTime.now());
@@ -316,9 +373,11 @@ public class PortalEmpleadoController {
 
     /** ADMIN: aceptar renuncia → activa liquidación estimada. */
     @PostMapping("/renuncia/{idRenuncia}/aceptar")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> aceptarRenuncia(@PathVariable String idRenuncia) {
-        Optional<Renuncia> opt = renunciaRepository.findById(idRenuncia);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        Optional<Renuncia> opt = renunciaRepository.findById(Long.parseLong(idRenuncia));
+        if (opt.isEmpty())
+            return ResponseEntity.notFound().build();
         Renuncia r = opt.get();
         r.setEstado("ACEPTADA");
         r.setFechaAceptacion(LocalDate.now());
@@ -347,6 +406,7 @@ public class PortalEmpleadoController {
 
     // ===== 7. PANEL ADMIN: PENDIENTES =====
     @GetMapping("/admin/pendientes")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> pendientes() {
         List<Novedad> novedadesPend = novedadRepository.findAll().stream()
                 .filter(n -> "PENDIENTE".equalsIgnoreCase(n.getEstado()))
@@ -356,8 +416,8 @@ public class PortalEmpleadoController {
                 .toList();
         List<Renuncia> renunciasPendienteDirecto = renunciaRepository.findByEstado("PENDIENTE");
         Map<String, Renuncia> porId = new LinkedHashMap<>();
-        renunciasPend.forEach(r -> porId.put(r.getId(), r));
-        renunciasPendienteDirecto.forEach(r -> porId.putIfAbsent(r.getId(), r));
+        renunciasPend.forEach(r -> porId.put(String.valueOf(r.getId()), r));
+        renunciasPendienteDirecto.forEach(r -> porId.putIfAbsent(String.valueOf(r.getId()), r));
         renunciasPend = List.copyOf(porId.values());
         List<Renuncia> liquidadas = renunciaRepository.findByEstado("ACEPTADA");
 
@@ -370,9 +430,11 @@ public class PortalEmpleadoController {
 
     /** ADMIN: aprobar o rechazar una novedad (decN). */
     @PostMapping("/novedades/{idNovedad}/responder")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> responderNovedad(@PathVariable String idNovedad, @RequestBody Map<String, String> body) {
-        Optional<Novedad> opt = novedadRepository.findById(idNovedad);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        Optional<Novedad> opt = novedadRepository.findById(Long.parseLong(idNovedad));
+        if (opt.isEmpty())
+            return ResponseEntity.notFound().build();
         Novedad n = opt.get();
         String decision = body.getOrDefault("estado", "APROBADA").toUpperCase();
         if (!decision.equals("APROBADA") && !decision.equals("RECHAZADA")) {
@@ -387,9 +449,11 @@ public class PortalEmpleadoController {
 
     /** ADMIN: rechazar una renuncia (decR). */
     @PostMapping("/renuncia/{idRenuncia}/rechazar")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> rechazarRenuncia(@PathVariable String idRenuncia) {
-        Optional<Renuncia> opt = renunciaRepository.findById(idRenuncia);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        Optional<Renuncia> opt = renunciaRepository.findById(Long.parseLong(idRenuncia));
+        if (opt.isEmpty())
+            return ResponseEntity.notFound().build();
         Renuncia r = opt.get();
         r.setEstado("RECHAZADA");
         r.setUpdatedAt(LocalDateTime.now());
@@ -398,9 +462,11 @@ public class PortalEmpleadoController {
 
     /** ADMIN: marcar la liquidación como pagada (pagar). */
     @PostMapping("/renuncia/{idRenuncia}/pagar")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> pagarLiquidacion(@PathVariable String idRenuncia) {
-        Optional<Renuncia> opt = renunciaRepository.findById(idRenuncia);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        Optional<Renuncia> opt = renunciaRepository.findById(Long.parseLong(idRenuncia));
+        if (opt.isEmpty())
+            return ResponseEntity.notFound().build();
         Renuncia r = opt.get();
         if (!"ACEPTADA".equalsIgnoreCase(r.getEstado())) {
             return ResponseEntity.badRequest().body(Map.of("error", "Solo se puede pagar una renuncia aceptada"));
@@ -414,7 +480,8 @@ public class PortalEmpleadoController {
     // ===== 6. LIQUIDACIÓN ESTIMADA =====
     private Map<String, Object> calcularLiquidacion(Long idEmpleado, Renuncia renuncia) {
         Optional<Empleado> optEmp = empleadoRepository.findById(idEmpleado);
-        if (optEmp.isEmpty()) return Map.of();
+        if (optEmp.isEmpty())
+            return Map.of();
 
         Empleado emp = optEmp.get();
         double salarioBase = emp.getSalarioBase() != null ? emp.getSalarioBase() : 0.0;
@@ -425,10 +492,10 @@ public class PortalEmpleadoController {
         long dias = Math.max(0, ChronoUnit.DAYS.between(inicio, fin));
 
         double salarioDiario = salarioBase / 30.0;
-        double cesantias = salarioDiario * dias;                    // 1 mes por año
+        double cesantias = salarioDiario * dias; // 1 mes por año
         double interesesCesantias = cesantias * 0.12 * (dias / 360.0); // 12% EA
-        double prima = salarioBase * dias / 360.0;                  // prima semestral
-        double vacaciones = salarioBase * dias / 720.0;             // 15 días por año
+        double prima = salarioBase * dias / 360.0; // prima semestral
+        double vacaciones = salarioBase * dias / 720.0; // 15 días por año
         double total = cesantias + interesesCesantias + prima + vacaciones;
 
         Map<String, Object> liq = new LinkedHashMap<>();
@@ -442,11 +509,41 @@ public class PortalEmpleadoController {
         return liq;
     }
 
+    private void validarEmpleado(String authorization, Long idEmpleado) {
+        if (!Objects.equals(obtenerEmpleadoAutenticado(authorization), idEmpleado)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes consultar datos de otro empleado.");
+        }
+    }
+
+    private Long obtenerEmpleadoAutenticado(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Se requiere iniciar sesión en el portal.");
+        }
+
+        try {
+            String token = authorization.substring("Bearer ".length());
+            if (!"ROLE_PORTAL_EMPLOYEE".equals(jwtUtil.extractRole(token)) || jwtUtil.isTokenExpired(token)) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "La sesión del portal expiró.");
+            }
+
+            String subject = jwtUtil.extractUsername(token);
+            String prefix = "portal-employee:";
+            if (subject == null || !subject.startsWith(prefix)) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "La sesión del portal no es válida.");
+            }
+            return Long.parseLong(subject.substring(prefix.length()));
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "La sesión del portal no es válida.");
+        }
+    }
+
     // ===== Carta autogenerada =====
     private String generarCarta(Empleado emp, String motivo, String nombreEmpresa) {
         LocalDate hoy = LocalDate.now();
-        String[] meses = {"enero","febrero","marzo","abril","mayo","junio",
-                "julio","agosto","septiembre","octubre","noviembre","diciembre"};
+        String[] meses = { "enero", "febrero", "marzo", "abril", "mayo", "junio",
+                "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre" };
         String fecha = hoy.getDayOfMonth() + " de " + meses[hoy.getMonthValue() - 1] + " de " + hoy.getYear();
         String nombre = emp.getNombre() + " " + emp.getApellido();
 
@@ -456,10 +553,13 @@ public class PortalEmpleadoController {
                 ", identificado(a) con cédula " + emp.getNumeroDocumento() +
                 ", ocupando actualmente el cargo de " +
                 (emp.getCargo() != null ? emp.getCargo() : "empleado") +
-                ", comunico formalmente mi decisión de renunciar al cargo que desempeño en la empresa, por motivos de " +
+                ", comunico formalmente mi decisión de renunciar al cargo que desempeño en la empresa, por motivos de "
+                +
                 motivo + ".\n\n" +
-                "Agradezco sinceramente la oportunidad, la confianza depositada en mí y la experiencia adquirida durante mi tiempo en la empresa. " +
-                "Estoy disponible para realizar el proceso de entrega de responsabilidades y facilitar una transición ordenada.\n\n" +
+                "Agradezco sinceramente la oportunidad, la confianza depositada en mí y la experiencia adquirida durante mi tiempo en la empresa. "
+                +
+                "Estoy disponible para realizar el proceso de entrega de responsabilidades y facilitar una transición ordenada.\n\n"
+                +
                 "Atentamente,\n\n" +
                 nombre + "\n" +
                 (emp.getCargo() != null ? emp.getCargo() : "");

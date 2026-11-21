@@ -19,6 +19,10 @@ public class EmpleadoService {
         return repository.findAll(pageable);
     }
 
+    public Page<Empleado> findByIdSucursal(final Long idSucursal, final Pageable pageable) {
+        return repository.findByIdSucursal(idSucursal, pageable);
+    }
+
     public Page<Empleado> findActivos(final Pageable pageable) {
         return repository.findByEstado("ACTIVO", pageable);
     }

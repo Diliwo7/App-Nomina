@@ -1,7 +1,7 @@
 package com.nomina.numa.scheduler;
 
-import com.nomina.numa.model.mongo.PeriodoNomina;
-import com.nomina.numa.repository.mongo.PeriodoNominaRepository;
+import com.nomina.numa.model.postgres.PeriodoNomina;
+import com.nomina.numa.repository.jpa.PeriodoNominaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;

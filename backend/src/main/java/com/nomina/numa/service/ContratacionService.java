@@ -1,7 +1,8 @@
 package com.nomina.numa.service;
 
-import com.nomina.numa.model.mongo.Contratacion;
-import com.nomina.numa.repository.mongo.ContratacionRepository;
+import com.nomina.numa.model.postgres.Contratacion;
+import com.nomina.numa.repository.jpa.ContratacionRepository;
+import com.nomina.numa.util.EstadoNominaCompat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -21,19 +22,41 @@ public class ContratacionService {
     }
 
     public Contratacion save(Contratacion contratacion) {
-        if (contratacion.getEstado() == null) {
+        if (contratacion.getEstado() == null || contratacion.getEstado().isBlank()) {
             contratacion.setEstado("VIGENTE");
+        } else {
+            contratacion.setEstado(EstadoNominaCompat.normalizar(contratacion.getEstado()));
         }
         return repo.save(contratacion);
     }
 
-    public Contratacion updateEstado(String id, String estado) {
+    public Contratacion updateEstado(Long id, String estado) {
         Optional<Contratacion> contratoOpt = repo.findById(id);
         if (contratoOpt.isPresent()) {
             Contratacion contrato = contratoOpt.get();
-            contrato.setEstado(estado);
+            contrato.setEstado(EstadoNominaCompat.normalizar(estado));
             return repo.save(contrato);
         }
         throw new RuntimeException("Contrato no encontrado con id: " + id);
+    }
+
+    public Optional<Contratacion> findById(Long id) {
+        return repo.findById(id);
+    }
+
+    public Contratacion guardarFirmaEmpleado(Long id, String firma) {
+        Contratacion contrato = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Contrato no encontrado con id: " + id));
+        contrato.setFirmaEmpleado(firma);
+        contrato.setFechaFirmaEmpleado(java.time.LocalDate.now());
+        return repo.save(contrato);
+    }
+
+    public Contratacion guardarFirmaEmpleador(Long id, String firma) {
+        Contratacion contrato = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Contrato no encontrado con id: " + id));
+        contrato.setFirmaEmpleador(firma);
+        contrato.setFechaFirmaEmpleador(java.time.LocalDate.now());
+        return repo.save(contrato);
     }
 }

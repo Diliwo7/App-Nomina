@@ -45,4 +45,39 @@ public class EmailService {
             return false;
         }
     }
+
+    public boolean enviarCodigoFirmaContrato(String destinatario, String nombreEmpleado, String codigoOTP) {
+        log.info("==================================================================");
+        log.info("🔑 CÓDIGO DE FIRMA CONTRATO (OTP) para [{}]: {}", destinatario, codigoOTP);
+        log.info("==================================================================");
+
+        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        if (mailSender == null) {
+            log.warn("No se envió correo SMTP: JavaMailSender no está disponible. Usa el código mostrado en consola: {}", codigoOTP);
+            return false;
+        }
+        if (sender == null || sender.isBlank()) {
+            log.warn("No se envió correo SMTP: configura spring.mail en application.properties. Código disponible en consola: {}", codigoOTP);
+            return false;
+        }
+
+        try {
+            SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setFrom(sender);
+            mensaje.setTo(destinatario);
+            mensaje.setSubject("Código de Verificación para Firma de Contrato - NUMA Nómina");
+            mensaje.setText("Hola " + (nombreEmpleado != null ? nombreEmpleado : "Colaborador") + ",\n\n"
+                    + "Has solicitado firmar tu contrato laboral en NUMA Nómina.\n\n"
+                    + "Tu código de verificación de seguridad es: " + codigoOTP + "\n\n"
+                    + "Este código es personal, intransferible y expira en 24 horas.\n"
+                    + "Tienes un máximo de 3 intentos para ingresarlo.\n\n"
+                    + "Si no solicitaste este código, comunícate de inmediato con Recursos Humanos.");
+            mailSender.send(mensaje);
+            log.info("Correo con código OTP enviado exitosamente a {}", destinatario);
+            return true;
+        } catch (Exception error) {
+            log.error("Falló el envío del correo SMTP a {}: {}", destinatario, error.getMessage());
+            return false;
+        }
+    }
 }

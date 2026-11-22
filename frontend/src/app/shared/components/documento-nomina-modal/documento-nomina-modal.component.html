@@ -23,10 +23,7 @@
           <input type="checkbox" [(ngModel)]="modoImpresionCompleta">
           <span>Ver las 3 páginas</span>
         </label>
-        <button
-          *ngIf="pestanaActiva === 'contrato' && !soloLectura"
-          type="button"
-          class="btn-renovar"
+        <button *ngIf="pestanaActiva === 'contrato' && !soloLectura" type="button" class="btn-renovar"
           (click)="abrirModalRenovacion()">
           🔄 Renovar Contrato
         </button>
@@ -428,24 +425,37 @@
           <div class="sign-box">
             <div class="sign-label">Firma del Trabajador</div>
 
-            <!-- Imagen ya guardada -->
+            <!-- Imagen ya guardada o Certificado OTP -->
             <div class="sign-preview" *ngIf="firmaTrabajadorGuardada">
-              <img [src]="firmaTrabajadorGuardada" alt="Firma trabajador" class="firma-img">
+              <img *ngIf="!esFirmaOTP(firmaTrabajadorGuardada)" [src]="firmaTrabajadorGuardada" alt="Firma trabajador" class="firma-img">
+              <div class="firma-otp-badge" *ngIf="esFirmaOTP(firmaTrabajadorGuardada)">
+                <div class="badge-icon"></div>
+                <div class="badge-text">
+                  <b>Firma Electrónica Certificada (OTP)</b><br>
+                  <span>{{ obtenerDetalleFirmaOTP(firmaTrabajadorGuardada) }}</span>
+                </div>
+              </div>
               <div class="sign-info">
                 <b>{{ nombreCompleto }}</b><br>
                 C.C. {{ documentoIdentidad }}
               </div>
-              <button class="btn-firma-editar no-print" (click)="abrirPadTrabajador()"> Editar firma</button>
+              <div class="firma-acciones-row no-print">
+                <button class="btn-firma-editar" (click)="abrirPadTrabajador()">✏️ Dibujar firma</button>
+                <button class="btn-firma-otp-sm" (click)="abrirModalOTP()">📩 Validar con código OTP</button>
+              </div>
             </div>
 
-            <!-- Línea vacía si aún no hay firma -->
+            <!-- Opciones si aún no hay firma -->
             <div class="sign-empty no-print" *ngIf="!firmaTrabajadorGuardada">
               <div class="linea-firma"></div>
               <div class="sign-info">
                 <b>{{ nombreCompleto }}</b><br>
                 C.C. {{ documentoIdentidad }}
               </div>
-              <button class="btn-firma-primary no-print" (click)="abrirPadTrabajador()">Firmar aquí</button>
+              <div class="firma-opciones-grid">
+                <button class="btn-firma-primary" (click)="abrirPadTrabajador()">✍️ Dibujar firma</button>
+                <button class="btn-firma-otp" (click)="abrirModalOTP()">📩 Firmar con código (OTP)</button>
+              </div>
             </div>
 
             <!-- PAD táctil trabajador -->
@@ -474,10 +484,10 @@
             <div class="sign-preview" *ngIf="firmaEmpleadorGuardada">
               <img [src]="firmaEmpleadorGuardada" alt="Firma empleador" class="firma-img">
               <div class="sign-info">
-                <b>Adrian Padilla</b><br>
+                <b>Dilibeth Cordoba y Adrian padilla</b><br>
                 Representante legal · NUMA STORE
               </div>
-              <button class="btn-firma-editar no-print" (click)="abrirPadEmpleador()">✏️ Editar firma</button>
+              <button class="btn-firma-editar no-print" (click)="abrirPadEmpleador()"> Editar firma</button>
             </div>
 
             <!-- Línea vacía si aún no hay firma -->
@@ -524,7 +534,7 @@
       <div class="renovacion-card" (click)="$event.stopPropagation()">
         <div class="renovacion-header">
           <div>
-            <h3>🔄 Renovar Contrato Laboral</h3>
+            <h3> Renovar Contrato Laboral</h3>
             <p class="renovacion-sub">Colaborador: <b>{{ nombreCompleto }}</b> (C.C. {{ documentoIdentidad }})</p>
           </div>
           <button type="button" class="btn-close-sub" (click)="cerrarModalRenovacion()">✕</button>
@@ -533,7 +543,8 @@
         <div class="renovacion-body">
           <div class="info-vigencia-actual">
             <span class="label-info">Contrato actual:</span>
-            <span class="valor-info">{{ fechaInicioContrato | date:'dd/MM/yyyy' }} al {{ fechaFinContrato | date:'dd/MM/yyyy' }}</span>
+            <span class="valor-info">{{ fechaInicioContrato | date:'dd/MM/yyyy' }} al {{ fechaFinContrato |
+              date:'dd/MM/yyyy' }}</span>
           </div>
 
           <div class="form-group">
@@ -548,7 +559,8 @@
           <div class="form-row">
             <div class="form-group">
               <label>Nueva Fecha de Inicio</label>
-              <input type="date" [(ngModel)]="renovacion.fechaInicio" (change)="calcularFechaFinPorDuracion()" class="form-input">
+              <input type="date" [(ngModel)]="renovacion.fechaInicio" (change)="calcularFechaFinPorDuracion()"
+                class="form-input">
             </div>
 
             <div class="form-group" *ngIf="renovacion.tipoContrato !== 'INDEFINIDO'">
@@ -580,8 +592,93 @@
 
         <div class="renovacion-footer">
           <button type="button" class="btn-cancelar-sub" (click)="cerrarModalRenovacion()">Cancelar</button>
-          <button type="button" class="btn-confirmar-sub" [disabled]="guardandoRenovacion" (click)="confirmarRenovacion()">
+          <button type="button" class="btn-confirmar-sub" [disabled]="guardandoRenovacion"
+            (click)="confirmarRenovacion()">
             {{ guardandoRenovacion ? 'Guardando...' : 'Confirmar y Renovar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ MODAL FIRMA CON CÓDIGO OTP ═══════════════════ -->
+    <div class="otp-overlay no-print" *ngIf="mostrarModalOTP" (click)="cerrarModalOTP()">
+      <div class="otp-card" (click)="$event.stopPropagation()">
+        <div class="otp-header">
+          <div class="otp-header-info">
+            <span class="otp-badge-top">Firma Electrónica Legal</span>
+            <h3>Validación de Firma por Código (OTP)</h3>
+            <p>Se enviará un código de seguridad de 6 dígitos al correo del empleado.</p>
+          </div>
+          <button type="button" class="btn-close" (click)="cerrarModalOTP()">✕</button>
+        </div>
+
+        <div class="otp-body">
+          <div class="otp-destinatario-card">
+            <div class="otp-dest-row">
+              <span class="otp-label">Colaborador:</span>
+              <span class="otp-val">{{ nombreCompleto }}</span>
+            </div>
+            <div class="otp-dest-row">
+              <span class="otp-label">Correo registrado:</span>
+              <span class="otp-val font-mono">{{ correoDestinoOTP || 'Cargando correo...' }}</span>
+            </div>
+          </div>
+
+          <div class="otp-step-box" *ngIf="!codigoEnviado">
+            <p class="otp-hint-text">
+              Para generar el código en el sistema y despacharlo al correo, haz clic a continuación:
+            </p>
+            <button
+              type="button"
+              class="btn-solicitar-otp"
+              [disabled]="enviandoCodigoOTP"
+              (click)="solicitarCodigoOTP()">
+              {{ enviandoCodigoOTP ? '⏳ Enviando código...' : '📩 Enviar código de seguridad a mi correo' }}
+            </button>
+          </div>
+
+          <div class="otp-step-box" *ngIf="codigoEnviado">
+            <label for="inputCodigoOTP" class="otp-input-label">Ingresa el código de 6 dígitos:</label>
+            <div class="otp-input-container">
+              <input
+                id="inputCodigoOTP"
+                type="text"
+                maxlength="6"
+                [(ngModel)]="codigoOTPInput"
+                placeholder="000000"
+                class="otp-digit-input"
+                autocomplete="one-time-code"
+              />
+            </div>
+            <div class="otp-sub-actions">
+              <span class="otp-expira-note">⏱️ Expira en 24 horas · Máx 3 intentos</span>
+              <button
+                type="button"
+                class="btn-reenviar-otp"
+                [disabled]="enviandoCodigoOTP"
+                (click)="solicitarCodigoOTP()">
+                Reenviar código
+              </button>
+            </div>
+          </div>
+
+          <div class="otp-feedback success" *ngIf="mensajeExitoOTP">
+            {{ mensajeExitoOTP }}
+          </div>
+          <div class="otp-feedback error" *ngIf="mensajeErrorOTP">
+            {{ mensajeErrorOTP }}
+          </div>
+        </div>
+
+        <div class="otp-footer">
+          <button type="button" class="btn-cancelar-otp" (click)="cerrarModalOTP()">Cancelar</button>
+          <button
+            type="button"
+            class="btn-firmar-otp"
+            *ngIf="codigoEnviado"
+            [disabled]="validandoCodigoOTP || !codigoOTPInput || codigoOTPInput.length < 6"
+            (click)="validarCodigoOTP()">
+            {{ validandoCodigoOTP ? '⏳ Verificando...' : '🔒 Validar y Firmar Contrato' }}
           </button>
         </div>
       </div>

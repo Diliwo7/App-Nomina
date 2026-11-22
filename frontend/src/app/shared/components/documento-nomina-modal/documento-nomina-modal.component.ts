@@ -67,6 +67,16 @@ export class DocumentoNominaModalComponent implements OnChanges, AfterViewInit {
   mostrarPadTrabajador  = false;
   mostrarPadEmpleador   = false;
 
+  // ── Firma con código OTP (tabla firma_contrato_codigo) ─────
+  mostrarModalOTP = false;
+  codigoOTPInput = '';
+  codigoEnviado = false;
+  enviandoCodigoOTP = false;
+  validandoCodigoOTP = false;
+  mensajeExitoOTP = '';
+  mensajeErrorOTP = '';
+  correoDestinoOTP = '';
+
   private _ctxTrab: CanvasRenderingContext2D | null = null;
   private _ctxEmp:  CanvasRenderingContext2D | null = null;
   private _dibujando = false;
@@ -272,6 +282,94 @@ export class DocumentoNominaModalComponent implements OnChanges, AfterViewInit {
   cancelarPad(quien: 'trab' | 'emp'): void {
     if (quien === 'trab') this.mostrarPadTrabajador = false;
     else                  this.mostrarPadEmpleador  = false;
+  }
+
+  // ── Métodos Firma con Código de Seguridad OTP ────────────────
+  esFirmaOTP(firma: string | null): boolean {
+    return !!firma && firma.startsWith('FIRMADO_ELECTRONICAMENTE_OTP');
+  }
+
+  obtenerDetalleFirmaOTP(firma: string | null): string {
+    if (!firma || !firma.startsWith('FIRMADO_ELECTRONICAMENTE_OTP')) return '';
+    const partes = firma.split(':');
+    const correo = partes[1] || '';
+    return correo ? `Firma verificada vía código enviado a ${correo}` : 'Firma electrónica verificada vía OTP';
+  }
+
+  abrirModalOTP(): void {
+    this.mostrarModalOTP = true;
+    this.codigoOTPInput = '';
+    this.codigoEnviado = false;
+    this.mensajeExitoOTP = '';
+    this.mensajeErrorOTP = '';
+    this.correoDestinoOTP = this.empleado?.correo || 'correo del empleado';
+  }
+
+  cerrarModalOTP(): void {
+    this.mostrarModalOTP = false;
+    this.codigoOTPInput = '';
+    this.mensajeExitoOTP = '';
+    this.mensajeErrorOTP = '';
+  }
+
+  solicitarCodigoOTP(): void {
+    const idContrato = this.contrato?.id;
+    if (!idContrato) {
+      this.mensajeErrorOTP = 'No se encontró el ID del contrato activo para solicitar el código.';
+      return;
+    }
+
+    this.enviandoCodigoOTP = true;
+    this.mensajeErrorOTP = '';
+    this.mensajeExitoOTP = '';
+
+    this.contratosService.solicitarCodigoFirma(idContrato).subscribe({
+      next: (res) => {
+        this.enviandoCodigoOTP = false;
+        this.codigoEnviado = true;
+        this.correoDestinoOTP = res.correoEnmascarado || this.correoDestinoOTP;
+        this.mensajeExitoOTP = res.mensaje || 'Código de seguridad generado y enviado.';
+      },
+      error: (err) => {
+        this.enviandoCodigoOTP = false;
+        this.mensajeErrorOTP = err.error?.error || 'Error al solicitar el código de verificación.';
+      }
+    });
+  }
+
+  validarCodigoOTP(): void {
+    const idContrato = this.contrato?.id;
+    if (!idContrato) {
+      this.mensajeErrorOTP = 'No se encontró el contrato a firmar.';
+      return;
+    }
+    if (!this.codigoOTPInput || this.codigoOTPInput.trim().length !== 6) {
+      this.mensajeErrorOTP = 'Por favor ingresa los 6 dígitos del código.';
+      return;
+    }
+
+    this.validandoCodigoOTP = true;
+    this.mensajeErrorOTP = '';
+    this.mensajeExitoOTP = '';
+
+    this.contratosService.verificarCodigoFirma(idContrato, this.codigoOTPInput.trim(), this.firmaTrabajadorGuardada || '').subscribe({
+      next: (contratoActualizado) => {
+        this.validandoCodigoOTP = false;
+        this.contrato = contratoActualizado;
+        this.firmaTrabajadorGuardada = contratoActualizado.firmaEmpleado || 'FIRMADO_ELECTRONICAMENTE_OTP';
+        try {
+          localStorage.setItem(`numa_firma_trab_${this.documentoIdentidad}`, this.firmaTrabajadorGuardada);
+        } catch (e) {}
+        this.mensajeExitoOTP = '¡Contrato firmado y validado con éxito!';
+        setTimeout(() => {
+          this.cerrarModalOTP();
+        }, 1200);
+      },
+      error: (err) => {
+        this.validandoCodigoOTP = false;
+        this.mensajeErrorOTP = err.error?.error || 'Código inválido o ha ocurrido un error.';
+      }
+    });
   }
 
   // ── Cálculos de nómina ───────────────────────────────────────

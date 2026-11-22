@@ -57,4 +57,17 @@ export class ContratosService {
     guardarFirmaEmpleadorContrato(idContrato: string | number, firmaBase64: string): Observable<Contrato> {
         return this.http.post<Contrato>(`${this.apiUrl}/${idContrato}/firma-empleador`, { firma: firmaBase64 });
     }
+
+    // ✅ Solicitar código OTP al correo para firma de contrato (tabla firma_contrato_codigo)
+    solicitarCodigoFirma(idContrato: string | number): Observable<any> {
+        return this.http.post<any>(`${this.apiUrl}/${idContrato}/solicitar-codigo-firma`, {});
+    }
+
+    // ✅ Verificar código OTP y firmar el contrato
+    verificarCodigoFirma(idContrato: string | number, codigo: string, firmaBase64?: string): Observable<Contrato> {
+        return this.http.post<Contrato>(`${this.apiUrl}/${idContrato}/verificar-codigo-firma`, {
+            codigo,
+            firma: firmaBase64 || ''
+        });
+    }
 }

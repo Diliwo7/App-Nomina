@@ -67,10 +67,14 @@ public class PagoNominaService {
             }
         }
 
+        String metodoPago = (req.getMetodoPago() != null && !req.getMetodoPago().isBlank())
+                ? req.getMetodoPago().trim().toUpperCase()
+                : "TRANSFERENCIA";
+
         PagoNomina pagoGeneral = PagoNomina.builder()
                 .idNomina(req.getPeriodoId())
                 .fechaPago(LocalDate.now())
-                .metodoPago("TRANSFERENCIA")
+                .metodoPago(metodoPago)
                 .estado("PAGADO")
                 .totalDevengado((double) liquidacion.getTotalDevengado())
                 .totalDeducciones((double) liquidacion.getTotalDeducciones())
@@ -93,7 +97,7 @@ public class PagoNominaService {
                     .costoTotalEmpleador((double) det.getCostoTotalEmpleador())
                     .sueldoBase((double) det.getSueldoBase())
                     .fechaPago(LocalDate.now())
-                    .metodoPago("TRANSFERENCIA")
+                    .metodoPago(metodoPago)
                     .estado("PAGADO")
                     .build();
 

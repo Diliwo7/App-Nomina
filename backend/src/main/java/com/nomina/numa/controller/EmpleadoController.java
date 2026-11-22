@@ -26,15 +26,14 @@ public class EmpleadoController {
     public ResponseEntity<Page<Empleado>> getEmpleados(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) Long idSucursal) {
+            @RequestParam(required = false) Long idSucursal,
+            @RequestParam(required = false) String buscar) {
 
-        Pageable pageable = PageRequest.of(page, size);
-        Page<Empleado> empleadosPage;
-        if (idSucursal != null) {
-            empleadosPage = empleadoService.findByIdSucursal(idSucursal, pageable);
-        } else {
-            empleadosPage = empleadoService.findAll(pageable);
-        }
+        // Orden descendente por ID para que los empleados recién registrados aparezcan de primero
+        Pageable pageable = PageRequest.of(page, size, org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "id"));
+
+        Page<Empleado> empleadosPage = empleadoService.findEmpleados(buscar, idSucursal, pageable);
 
         return ResponseEntity.ok(empleadosPage);
     }
@@ -62,20 +61,28 @@ public class EmpleadoController {
     public ResponseEntity<?> actualizarEmpleado(@PathVariable Long id, @RequestBody Empleado datos) {
         Empleado empleado = empleadoService.findById(id);
         if (empleado == null) return ResponseEntity.notFound().build();
-        if (datos.getSalarioBase() != null && datos.getSalarioBase() < salarioMinimo) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "El salario mensual no puede ser inferior al mínimo configurado de " + salarioMinimo));
+
+        Double salario = datos.getSalarioBase();
+        if (salario != null && salario > 0 && salario < 1000) {
+            // Manejo de valores con punto de mil (ej: 1.801289 -> 1801289)
+            salario = salario * 1_000_000;
         }
-        if (datos.getTasaArl() != null && (datos.getTasaArl() <= 0 || datos.getTasaArl() > 100)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "La tasa ARL debe ser un porcentaje entre 0 y 100"));
+        if (salario != null && salario < salarioMinimo) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "El salario mensual ($" + Math.round(salario) + ") no puede ser inferior al mínimo configurado de $" + salarioMinimo));
+        }
+        if (salario != null) {
+            empleado.setSalarioBase(salario);
+        }
+
+        if (datos.getTasaArl() != null && datos.getTasaArl() > 0 && datos.getTasaArl() <= 100) {
+            empleado.setTasaArl(datos.getTasaArl());
         }
 
         // Solo sobreescribir campos que realmente llegaron con valor (evita poner NULL en campos válidos)
         if (datos.getNombre() != null) empleado.setNombre(datos.getNombre());
         if (datos.getApellido() != null) empleado.setApellido(datos.getApellido());
         if (datos.getCargo() != null) empleado.setCargo(datos.getCargo());
-        if (datos.getSalarioBase() != null) empleado.setSalarioBase(datos.getSalarioBase());
-        if (datos.getTasaArl() != null) empleado.setTasaArl(datos.getTasaArl());
         if (datos.getModalidadTrabajo() != null) empleado.setModalidadTrabajo(datos.getModalidadTrabajo());
         if (datos.getTransporteSuministrado() != null) {
             empleado.setTransporteSuministrado(datos.getTransporteSuministrado());

@@ -32,11 +32,14 @@ export class EmpleadosService {
     return this.http.get<any[]>(`${this.baseUrl}/api/pagos-nomina/periodo/${periodoId}`);
   }
 
-  // ✅ Paginación Activa con soporte opcional de filtro por sucursal
-  getEmpleados(page: number = 0, size: number = 10, idSucursal?: number | ''): Observable<any> {
+  // ✅ Paginación Activa con soporte opcional de filtro por sucursal y búsqueda global en BD
+  getEmpleados(page: number = 0, size: number = 10, idSucursal?: number | '', buscar?: string): Observable<any> {
     let url = `${this.baseUrl}/api/empleados?page=${page}&size=${size}`;
     if (idSucursal !== undefined && idSucursal !== null && idSucursal !== '') {
       url += `&idSucursal=${idSucursal}`;
+    }
+    if (buscar && buscar.trim() !== '') {
+      url += `&buscar=${encodeURIComponent(buscar.trim())}`;
     }
     return this.http.get<any>(url);
   }

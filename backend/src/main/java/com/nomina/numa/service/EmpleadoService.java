@@ -19,6 +19,16 @@ public class EmpleadoService {
         return repository.findAll(pageable);
     }
 
+    public Page<Empleado> findEmpleados(final String buscar, final Long idSucursal, final Pageable pageable) {
+        if (buscar != null && !buscar.trim().isEmpty()) {
+            return repository.buscarEmpleados(buscar.trim(), idSucursal, pageable);
+        }
+        if (idSucursal != null) {
+            return repository.findByIdSucursal(idSucursal, pageable);
+        }
+        return repository.findAll(pageable);
+    }
+
     public Page<Empleado> findByIdSucursal(final Long idSucursal, final Pageable pageable) {
         return repository.findByIdSucursal(idSucursal, pageable);
     }

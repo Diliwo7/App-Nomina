@@ -157,12 +157,14 @@ export class ContratosEmpleadosComponent implements OnInit {
         this.empleadoPendiente = null;
     }
 
+    private searchTimeout: any;
+
     cargarEmpleados() {
-        this.empleadosService.getEmpleados(this.paginaActual, this.tamanoPagina, this.sucursalFiltro).subscribe({
+        this.empleadosService.getEmpleados(this.paginaActual, this.tamanoPagina, this.sucursalFiltro, this.busqueda).subscribe({
             next: (data: any) => {
                 const rawContent = data.content ? data.content : (Array.isArray(data) ? data : []);
-                this.totalElementos = data.totalElements || rawContent.length;
-                this.totalPaginas = data.totalPages || Math.ceil(this.totalElementos / this.tamanoPagina) || 1;
+                this.totalElementos = data.totalElements !== undefined ? data.totalElements : rawContent.length;
+                this.totalPaginas = data.totalPages !== undefined ? data.totalPages : Math.ceil(this.totalElementos / this.tamanoPagina) || 1;
 
                 this.empleados = rawContent.map((emp: any) => ({
                     ...emp,
@@ -171,7 +173,7 @@ export class ContratosEmpleadosComponent implements OnInit {
                     id: emp.id || emp.idEmpleado || emp.documento,
                     idSucursal: emp.idSucursal || 1
                 }));
-                this.filtrar();
+                this.empleadosFiltrados = [...this.empleados];
                 if (this.empleadoPendiente != null) this.abrirContratoPendiente();
             },
             error: (error) => {
@@ -194,19 +196,17 @@ export class ContratosEmpleadosComponent implements OnInit {
     }
 
     filtrar() {
-        const term = this.busqueda.toLowerCase();
-        this.empleadosFiltrados = this.empleados.filter(e => {
-            const matchesText =
-                e.documento?.toString().includes(term) ||
-                e.nombreCompleto?.toLowerCase().includes(term) ||
-                e.cargo?.toLowerCase().includes(term);
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => {
+            this.paginaActual = 0;
+            this.cargarEmpleados();
+        }, 250);
+    }
 
-            const matchesSucursal =
-                this.sucursalFiltro === '' ||
-                Number(e.idSucursal) === Number(this.sucursalFiltro);
-
-            return matchesText && matchesSucursal;
-        });
+    buscarDirecto() {
+        clearTimeout(this.searchTimeout);
+        this.paginaActual = 0;
+        this.cargarEmpleados();
     }
 
     verContrato(emp: any) {

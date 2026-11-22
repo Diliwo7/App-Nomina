@@ -10,8 +10,8 @@
             <div class="search-box numa-search">
                 <span class="numa-search-icon"><i class="fas fa-search"></i></span>
                 <input type="text" class="numa-search-input" placeholder="Buscar por nombre, cédula o cargo..."
-                    [(ngModel)]="busqueda" (input)="filtrar()">
-                <button class="numa-search-btn">Buscar</button>
+                    [(ngModel)]="busqueda" (input)="filtrar()" (keyup.enter)="buscarDirecto()">
+                <button class="numa-search-btn" (click)="buscarDirecto()">Buscar</button>
             </div>
 
             <!-- FILTRO POR SUCURSAL -->

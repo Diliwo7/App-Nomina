@@ -313,7 +313,62 @@
 }
 
 .acciones-contrato {
-  text-align: center;
+  margin-top: 14px;
+}
+
+.acciones-grid-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-acc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+
+  i { font-size: 13px; }
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  }
+
+  &.btn-acc-contrato {
+    background: linear-gradient(135deg, #7c4dff, #6200ea);
+    color: #fff;
+    &:hover { background: #5c00d2; }
+  }
+
+  &.btn-acc-liquidar {
+    background: #fff1f2;
+    color: #e11d48;
+    border-color: #fecdd3;
+    &:hover { background: #ffe4e6; }
+  }
+
+  &.btn-acc-pagar {
+    background: #f0fdf4;
+    color: #16a34a;
+    border-color: #bbf7d0;
+    &:hover { background: #dcfce7; }
+  }
+
+  &.btn-acc-novedad {
+    background: #f5f3ff;
+    color: #7c3aed;
+    border-color: #ddd6fe;
+    &:hover { background: #ede9fe; }
+  }
 }
 
 .btn-ver-contrato {

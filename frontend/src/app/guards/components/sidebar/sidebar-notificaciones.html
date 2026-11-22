@@ -75,11 +75,11 @@
               </div>
             </div>
 
-            <!-- Contrato actual (MongoDB) -->
+            <!-- Contrato actual (PostgreSQL) -->
             <div class="seccion" *ngIf="detalleContrato">
               <h5>Contrato actual</h5>
               <div class="ficha-grid">
-                <div><span class="lbl">Tipo:</span> {{ nombreTipoContrato[detalleContrato.idTipoContrato] || detalleContrato.idTipoContrato }}</div>
+                <div><span class="lbl">Tipo:</span> {{ obtenerNombreTipo(detalleContrato.idTipoContrato) }}</div>
                 <div><span class="lbl">Estado:</span> {{ detalleContrato.estado || 'N/A' }}</div>
                 <div><span class="lbl">Inicio:</span> {{ fechaBonita(detalleContrato.fechaInicio) }}</div>
                 <div><span class="lbl">Fin:</span> {{ fechaBonita(detalleContrato.fechaFin) }}</div>
@@ -87,11 +87,23 @@
             </div>
             <p class="vacio" *ngIf="!detalleContrato && detalleContratos.length === 0">Sin contrataciones registradas en el sistema.</p>
 
-            <!-- Botón para ir al módulo de contratos y abrir el contrato completo -->
+            <!-- Acciones rápidas (Ver Contrato, Liquidar, Pagar, Novedades) -->
             <div class="seccion acciones-contrato">
-              <button class="btn-ver-contrato" (click)="irAContrato(emp)">
-                <i class="fas fa-file-contract"></i> Ver contrato del empleado
-              </button>
+              <h5>Acciones rápidas</h5>
+              <div class="acciones-grid-btns">
+                <button type="button" class="btn-acc btn-acc-contrato" (click)="irAContrato(emp)" title="Ver contrato">
+                  <i class="fas fa-file-contract"></i> Ver contrato
+                </button>
+                <button type="button" class="btn-acc btn-acc-liquidar" (click)="irALiquidar(emp)" title="Liquidar prestaciones y contrato">
+                  <i class="fas fa-calculator"></i> Liquidar
+                </button>
+                <button type="button" class="btn-acc btn-acc-pagar" (click)="irAPagarNomina(emp)" title="Ir al pago de nómina">
+                  <i class="fas fa-money-check-alt"></i> Pagar nómina
+                </button>
+                <button type="button" class="btn-acc btn-acc-novedad" (click)="irANuevaNovedad(emp)" title="Registrar novedad laboral">
+                  <i class="fas fa-plus-circle"></i> + Novedad
+                </button>
+              </div>
             </div>
 
             <!-- Historial -->

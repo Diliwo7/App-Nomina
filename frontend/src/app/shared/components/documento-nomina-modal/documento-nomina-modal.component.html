@@ -41,7 +41,6 @@
 
       <!-- ============ 1. COMPROBANTE DE PAGO ============ -->
       <section class="page" *ngIf="pestanaActiva === 'comprobante' || modoImpresionCompleta">
-        <div class="wm">PRELIMINAR</div>
         <div class="head">
           <div>
             <div class="brand">NUMA STORE S.A.S.</div>
@@ -50,7 +49,7 @@
           <div class="doc">
             <b>Comprobante de pago de nómina</b>
             <span class="sub">N.º {{ codigoDocumento }}</span><br>
-            <span class="badge">Período abierto · borrador</span>
+            <span class="badge">Comprobante Oficial de Nómina</span>
           </div>
         </div>
 
@@ -290,9 +289,6 @@
             </tr>
           </tbody>
         </table>
-        <p class="sub" style="margin:4px 0 14px">
-          En «Detalle» muestra fecha, tipo (diurna, nocturna, dominical, festiva), horas y recargo de cada novedad.
-        </p>
 
         <div class="cols" style="grid-template-columns:1fr 1fr">
           <div class="dev">

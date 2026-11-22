@@ -1,4 +1,4 @@
-﻿// src/app/app.routes.ts
+// src/app/app.routes.ts
 import { Routes } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 import { adminGuard } from './guards/admin.guard';
@@ -92,6 +92,12 @@ export const routes: Routes = [
   {
     path: 'pago-nomina',
     loadComponent: () => import('./pages/pago-nomina/pago-nomina.component').then(m => m.PagoNominaComponent),
+    canActivate: [authGuard]
+  },
+
+  {
+    path: 'pago-individual',
+    loadComponent: () => import('./pages/pago-individual/pago-individual.component').then(m => m.PagoIndividualComponent),
     canActivate: [authGuard]
   },
 

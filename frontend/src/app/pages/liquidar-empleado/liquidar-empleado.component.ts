@@ -1,8 +1,7 @@
-﻿// src/app/pages/liquidar-empleado/liquidar-empleado.component.ts
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { SidebarComponent } from '../../guards/components/sidebar/sidebar.component';
 import { EncabezadoPaginaComponent } from '../../shared/components/encabezado-pagina/encabezado-pagina.component';
 import { TablaBaseComponent } from '../../shared/components/tabla-base/tabla-base.component';
@@ -30,7 +29,7 @@ export class LiquidarEmpleadoComponent implements OnInit {
   empleadoModalDoc: any = null;
   pestanaModalDoc: TipoDocumentoNomina = 'comprobante';
 
-  constructor(private empleadosService: EmpleadosService, private route: ActivatedRoute) { }
+  constructor(private empleadosService: EmpleadosService, private route: ActivatedRoute, private router: Router) { }
 
   ngOnInit(): void {
     this.cargarEmpleados();
@@ -118,10 +117,10 @@ export class LiquidarEmpleadoComponent implements OnInit {
       alert(`No se puede calcular el pago: ${emp.nombre} ${emp.apellido} no tiene un salario base registrado.`);
       return;
     }
-    // Abre el visor oficial con el diseño idéntico al solicitado (A4, PRELIMINAR, devengos/deducciones, neto COP)
-    this.empleadoModalDoc = emp;
-    this.pestanaModalDoc = 'comprobante';
-    this.mostrarModalDoc = true;
+    // Navegar a la página de pago individual con el empleado preseleccionado
+    this.router.navigate(['/pago-individual'], {
+      queryParams: { empleadoId: emp.id }
+    });
   }
 
   cerrarModalDoc(): void {

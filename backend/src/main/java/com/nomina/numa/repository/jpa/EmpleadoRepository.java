@@ -16,6 +16,17 @@ public interface EmpleadoRepository extends JpaRepository<Empleado, Long> {
     // Búsqueda por sucursal con paginación
     Page<Empleado> findByIdSucursal(Long idSucursal, Pageable pageable);
 
+    // Búsqueda global por texto (cédula, nombre, apellido o cargo) y filtro opcional por sucursal
+    @Query("select e from Empleado e where " +
+           "(:idSucursal is null or e.idSucursal = :idSucursal) and " +
+           "(:buscar is null or :buscar = '' or " +
+           "lower(coalesce(e.numeroDocumento, '')) like lower(concat('%', :buscar, '%')) or " +
+           "lower(concat(coalesce(e.nombre, ''), ' ', coalesce(e.apellido, ''))) like lower(concat('%', :buscar, '%')) or " +
+           "lower(coalesce(e.cargo, '')) like lower(concat('%', :buscar, '%')))")
+    Page<Empleado> buscarEmpleados(@org.springframework.data.repository.query.Param("buscar") String buscar,
+                                   @org.springframework.data.repository.query.Param("idSucursal") Long idSucursal,
+                                   Pageable pageable);
+
     //  Conteo por estado ignorando mayúsculas/minúsculas y espacios
     @Query("select count(e) from Empleado e where lower(trim(e.estado)) = lower(:estado)")
     long countByEstadoIgnoreCase(String estado);

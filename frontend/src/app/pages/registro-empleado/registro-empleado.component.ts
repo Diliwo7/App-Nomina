@@ -1,22 +1,23 @@
-﻿// src/app/pages/registro-empleado/registro-empleado.component.ts
-import { Component } from '@angular/core';
+// src/app/pages/registro-empleado/registro-empleado.component.ts
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { SidebarComponent } from '../../guards/components/sidebar/sidebar.component';
 import { EncabezadoPaginaComponent } from '../../shared/components/encabezado-pagina/encabezado-pagina.component';
+import { EmpleadosService } from '../../services/empleados.service';
 import Swal from 'sweetalert2';
 import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-registro-empleado',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, EncabezadoPaginaComponent], // â† AGREGA SidebarComponent
+  imports: [CommonModule, FormsModule, SidebarComponent, EncabezadoPaginaComponent],
   templateUrl: './registro-empleado.component.html',
   styleUrls: ['./registro-empleado.component.scss']
 })
-export class RegistroEmpleadoComponent {
+export class RegistroEmpleadoComponent implements OnInit {
 
   // VARIABLES
   loading = false;
@@ -47,8 +48,14 @@ export class RegistroEmpleadoComponent {
     estado: 'Activo',
     empresa: 'NUMA STORE',
     correoEmpresarial: '',
-    idEmpresa: 1
+    idEmpresa: 1,
+    idSucursal: 1
   };
+
+  sucursales: any[] = [
+    { id: 1, nombre: 'Sucursal San José (Sede 1)' },
+    { id: 2, nombre: 'Sucursal Villa Grande (Sede 2)' }
+  ];
 
   cargos = ['Administrador', 'Ventas', 'Cajero', 'Auxiliar de Bodega'];
   tiposContrato = ['Fijo', 'Indefinido', 'Por obra', 'Aprendizaje'];
@@ -58,7 +65,22 @@ export class RegistroEmpleadoComponent {
   tiposCuenta = ['Ahorros', 'Corriente'];
   numeroTarjeta = '';
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(
+    private http: HttpClient,
+    private router: Router,
+    private empleadosService: EmpleadosService
+  ) {}
+
+  ngOnInit(): void {
+    this.empleadosService.getSucursales().subscribe({
+      next: (data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          this.sucursales = data;
+        }
+      },
+      error: () => {}
+    });
+  }
 
   //  REGISTRAR
   registrar() {
@@ -87,17 +109,18 @@ export class RegistroEmpleadoComponent {
       : '';
 
     this.http.post(`${environment.apiUrl}/api/empleados`, this.empleado).subscribe({
-  next: () => {
-    this.exito = true;
-    this.loading = false;
-    setTimeout(() => this.router.navigate(['/dashboard']), 2000);
-  },
-  error: (err) => {
-    console.error(err);
-    Swal.fire('Error', err.error?.error || 'Error al guardar', 'error');
-    this.loading = false;
-  }
-});
+      next: () => {
+        this.exito = true;
+        this.loading = false;
+        Swal.fire('¡Éxito!', 'Empleado registrado correctamente en la sucursal seleccionada', 'success');
+        setTimeout(() => this.router.navigate(['/contratos-empleados']), 1500);
+      },
+      error: (err) => {
+        console.error(err);
+        Swal.fire('Error', err.error?.error || 'Error al guardar', 'error');
+        this.loading = false;
+      }
+    });
   }
 
   cancelar() {

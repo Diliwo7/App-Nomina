@@ -1,4 +1,4 @@
-﻿// src/app/pages/consultar-empleados/consultar-empleados.component.ts
+// src/app/pages/consultar-empleados/consultar-empleados.component.ts
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -54,28 +54,34 @@ export class ConsultarEmpleadosComponent implements OnInit {
     this.cargarPeriodoActual();
   }
 
-  // ✅ Actualizado: Lee la propiedad '.content' que devuelve Spring Boot
+  private searchTimeout: any;
+
+  // ✅ Actualizado: Lee la propiedad '.content' que devuelve Spring Boot con búsqueda en BD
   cargarEmpleados() {
-    this.empleadosService.getEmpleados(this.paginaActual, this.tamanoPagina).subscribe({
+    this.empleadosService.getEmpleados(this.paginaActual, this.tamanoPagina, '', this.busqueda).subscribe({
       next: (response: any) => {
         // Extraemos la lista de la propiedad content de Spring Data Page
         const rawContent = response.content || [];
         
         this.empleados = rawContent.map((emp: any) => ({
+          ...emp,
           id: emp.id,
           documento: emp.numeroDocumento || emp.documento || 'S/N',
           nombre: this.limpiarTexto(emp.nombre || 'Sin nombre'),
           apellido: this.limpiarTexto(emp.apellido || 'Sin apellido'),
           cargo: emp.cargo || 'Sin cargo',
           salarioBase: Number(emp.salarioBase) || 0,
+          tasaArl: Number(emp.tasaArl) > 0 ? Number(emp.tasaArl) : 0.522,
+          modalidadTrabajo: emp.modalidadTrabajo || 'PRESENCIAL',
+          transporteSuministrado: emp.transporteSuministrado ?? false,
           foto: emp.foto || '/assets/user-default.png'
         }));
         
         this.empleadosFiltrados = [...this.empleados];
 
         // Guardamos la información de las páginas para los botones
-        this.totalElementos = response.totalElements || 0;
-        this.totalPaginas = response.totalPages || 0;
+        this.totalElementos = response.totalElements !== undefined ? response.totalElements : rawContent.length;
+        this.totalPaginas = response.totalPages !== undefined ? response.totalPages : 1;
       },
       error: () => alert('Error al cargar empleados')
     });
@@ -102,12 +108,17 @@ export class ConsultarEmpleadosComponent implements OnInit {
   }
 
   filtrar() {
-    const term = this.busqueda.toLowerCase();
-    this.empleadosFiltrados = this.empleados.filter(e =>
-      e.documento.toLowerCase().includes(term) ||
-      `${e.nombre} ${e.apellido}`.toLowerCase().includes(term) ||
-      e.cargo.toLowerCase().includes(term)
-    );
+    clearTimeout(this.searchTimeout);
+    this.searchTimeout = setTimeout(() => {
+      this.paginaActual = 0;
+      this.cargarEmpleados();
+    }, 250);
+  }
+
+  buscarDirecto() {
+    clearTimeout(this.searchTimeout);
+    this.paginaActual = 0;
+    this.cargarEmpleados();
   }
 
   verNominaCompleta(empleado: any) {

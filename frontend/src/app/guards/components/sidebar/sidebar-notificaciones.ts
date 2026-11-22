@@ -41,8 +41,18 @@ export class SidebarNotificacionesComponent implements OnInit, OnDestroy {
     'TERMINO_FIJO': 'Término fijo',
     'TERMINO_INDEFINIDO': 'Término indefinido',
     'OBRA_LABOR': 'Obra o labor',
-    'APRENDIZ': 'Aprendizaje'
+    'APRENDIZ': 'Aprendizaje',
+    'APRENDIZAJE': 'Aprendizaje',
+    'FIJO': 'Término fijo',
+    'INDEFINIDO': 'Término indefinido',
+    'POR_OBRA': 'Por obra o labor'
   };
+
+  obtenerNombreTipo(idTipo?: string): string {
+    if (!idTipo || idTipo === 'undefined' || idTipo === 'null') return 'Término fijo';
+    const clave = idTipo.trim().toUpperCase();
+    return this.nombreTipoContrato[clave] || idTipo;
+  }
 
   constructor(
     private alertasService: AlertasService,
@@ -156,6 +166,33 @@ export class SidebarNotificacionesComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Navega a liquidación con el empleado preseleccionado */
+  irALiquidar(emp: any): void {
+    this.detalleAbierto = false;
+    this.panelAbierto = false;
+    this.router.navigate(['/liquidar'], {
+      queryParams: { empleadoId: emp.id }
+    });
+  }
+
+  /** Navega al pago individual del empleado */
+  irAPagarNomina(emp: any): void {
+    this.detalleAbierto = false;
+    this.panelAbierto = false;
+    this.router.navigate(['/pago-individual'], {
+      queryParams: { empleadoId: emp.id }
+    });
+  }
+
+  /** Navega a registrar una novedad para este empleado */
+  irANuevaNovedad(emp: any): void {
+    this.detalleAbierto = false;
+    this.panelAbierto = false;
+    this.router.navigate(['/nueva-novedad'], {
+      queryParams: { empleadoId: emp.id, documento: emp.numeroDocumento }
+    });
+  }
+
   /** Elige el contrato relevante: VIGENTE primero, luego el que coincide con la alerta */
   private elegirContrato(contratos: Contrato[], alerta: Alerta): Contrato | null {
     if (contratos.length === 0) return null;
@@ -212,7 +249,7 @@ export class SidebarNotificacionesComponent implements OnInit, OnDestroy {
       const esVigente = estado === 'VIGENTE';
       eventos.push({
         tipo: 'CONTRATO',
-        titulo: `Contrato ${this.nombreTipoContrato[c.idTipoContrato] || c.idTipoContrato}`,
+        titulo: `Contrato ${this.obtenerNombreTipo(c.idTipoContrato)}`,
         fecha: c.fechaInicio,
         detalle: `Del ${this.fechaBonita(c.fechaInicio)} al ${this.fechaBonita(c.fechaFin)} · ${esVigente ? 'Vigente' : (estado || 'N/A')}`
       });
